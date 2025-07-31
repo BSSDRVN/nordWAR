@@ -1,0 +1,859 @@
+---
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(robotstxt)
+library(rvest)
+
+library(stringr) #Solely for the both_teams addendum. If I can remove this, I will.
+```
+
+```{r urls, include=FALSE}
+#Batting stats URL for the Sunday league
+mabl_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&u=TCMABL&s=baseball&t=print"
+
+#Fielding stats URL for the Sunday league
+mabl_fielding_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&viewseas=Summer_2025&cat=Fielding&u=TCMABL&s=baseball&t=print"
+
+#Pitching stats URL for the Sunday league
+mabl_pitching_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&viewseas=Summer_2025&cat=Pitching&u=TCMABL&s=baseball&t=print"
+
+#Batting stats URL for the Thursday league
+nmtbl_url <- "https://www.nmtbl.com/teams/default.asp?p=stats&u=NMTBL&s=baseball&t=print"
+
+#Fielding stats URL for the Thursday league
+nmtbl_fielding_url <- "https://www.nmtbl.com/teams/default.asp?p=stats&viewseas=Summer_2025&cat=Fielding&u=NMTBL&s=baseball&t=print"
+
+#Pitching stats URL for the Thursday league
+nmtbl_pitching_url <- "https://www.nmtbl.com/teams/default.asp?p=stats&viewseas=Summer_2025&cat=Pitching&u=NMTBL&s=baseball&t=print"
+
+#Current URL for the FanGraphs guts page
+fangraphs_guts_url <- "https://www.fangraphs.com/guts.aspx?type=cn"
+```
+
+```{r scrape_websites, include=FALSE}
+mabl_scrape <- read_html(mabl_url) %>% #reads thru the page
+  html_nodes("table") %>% #searches for table nodes
+  .[1] %>% #picks the first one from the list
+  html_table() %>% #
+  .[[1]] %>%
+  as_tibble(.name_repair = "unique", header = TRUE)
+
+mabl_scrape_fielding <- read_html(mabl_fielding_url) %>% #reads thru the page
+  html_nodes("table") %>% #searches for table nodes
+  .[1] %>% #picks the first one from the list
+  html_table() %>% #
+  .[[1]] %>%
+  as_tibble(.name_repair = "unique", header = TRUE)
+
+mabl_scrape_pitching <- read_html(mabl_pitching_url) %>% #reads thru the page
+  html_nodes("table") %>% #searches for table nodes
+  .[1] %>% #picks the first one from the list
+  html_table() %>% #
+  .[[1]] %>%
+  as_tibble(.name_repair = "unique", header = TRUE)
+
+nmtbl_scrape <- read_html(nmtbl_url) %>%
+  html_nodes("table") %>% #searches for table nodes
+  .[1] %>% #picks the first one from the list
+  html_table() %>% #
+  .[[1]] %>%
+  as_tibble(.name_repair = "unique", header = TRUE)
+
+nmtbl_scrape_fielding <- read_html(nmtbl_fielding_url) %>% #reads thru the page
+  html_nodes("table") %>% #searches for table nodes
+  .[1] %>% #picks the first one from the list
+  html_table() %>% #
+  .[[1]] %>%
+  as_tibble(.name_repair = "unique", header = TRUE)
+
+nmtbl_scrape_pitching <- read_html(nmtbl_pitching_url) %>% #reads thru the page
+  html_nodes("table") %>% #searches for table nodes
+  .[1] %>% #picks the first one from the list
+  html_table() %>% #
+  .[[1]] %>%
+  as_tibble(.name_repair = "unique", header = TRUE)
+
+#scraping fangraphs website for guts constants (FIP, wOBA)
+fg_scrape <- read_html(fangraphs_guts_url) %>%
+  html_nodes("table") %>% #searches for table nodes
+  .[10] %>% #picks the tenth one from the list, in our case the guts table
+  html_table() %>% #
+  .[[1]] %>% #selects the table from the console
+  as_tibble(.name_repair = "unique", header = TRUE)
+```
+
+```{r set_constants, include=FALSE}
+### SET GAMES PLAYED, PARK FACTOR, ASSUMPTIONS ETC ###
+mabl_games_played <- 16
+mabl_total_games <- 22
+mabl_teams <- 16
+mabl_opponent_name <- "Milkmen"
+
+mabl_total_season_wins_overall <- ((mabl_games_played * mabl_teams) /2)
+
+nmtbl_games_played <- 12
+nmtbl_total_games <- 14
+nmtbl_teams <- 12
+nmtbl_opponent_name <- "Legends"
+
+nmtbl_total_season_wins_overall <- ((nmtbl_games_played * nmtbl_teams) /2)
+
+park_factor <- 1
+wobascale <- fg_scrape[1, ]$wOBAScale #first row's wobascale column
+
+runCS <- -.3 #How bad does it affect a player to be caught stealing? (FG says -(2 x RunsPerOut + 0.075).)
+runSB <- .2 #How well does it affect a player to steal a base? (FG says set this at 0.2.)
+
+RPW_FG <- fg_scrape[1, ]$`R/W`
+```
+
+```{r make_row_headers, include=FALSE}
+mabl <- mabl_scrape %>% 
+  janitor::row_to_names(row_number = 1) %>%
+  mutate(
+    across(.cols = c(G, PA, AB, R, H, `2B`, `3B`, HR, RBI, HBP, BB, SO, SacB, SacF, SB, CS), .fns = as.integer),
+    across(.cols = c(AVG, OBP, SLG), .fns = as.double)
+  ) %>%
+  replace(is.na(.), 0) #all numeric values that should be 0 are now 0 and not NA
+
+mabl_field <- mabl_scrape_fielding %>% 
+  janitor::row_to_names(row_number = 1) %>%
+  mutate(
+    across(.cols = c(G, GS, TC, PO, A, E, DP, SBA, CS, PB), .fns = as.integer),
+    across(.cols = c(`FLD%`, `CS%`, INN), .fns = as.double)
+  ) %>%
+  replace(is.na(.), 0) #all numeric values that should be 0 are now 0 and not NA
+
+mabl_pitch <- mabl_scrape_pitching %>%
+  janitor::row_to_names(row_number = 1) %>%
+  mutate(
+    across(.cols = c(G, GS, CG, SHO, W, L, SV, SVO, BF, H, R, ER, HR, HBP, BB, IBB, SO, SacF, SacB, BK, B, S, PC, WP), .fns = as.integer),
+    across(.cols = c(INN, WHIP, OBA, ERA), .fns = as.double)
+  ) %>%
+  replace(is.na(.), 0) #all numeric values that should be 0 are now 0 and not NA
+
+nmtbl <- nmtbl_scrape %>% 
+  janitor::row_to_names(row_number = 1) %>%
+  mutate(
+    across(.cols = c(G, PA, AB, R, H, `2B`, `3B`, HR, RBI, HBP, BB, SO, SacB, SacF, SB, CS), .fns = as.integer),
+    across(.cols = c(AVG, OBP, SLG, TB, OPS), .fns = as.double) #the thursday league has OPS and total bases for some reason
+  ) %>% replace(is.na(.), 0) %>%
+  filter(Name != "Overall Stats")
+
+nmtbl_field <- nmtbl_scrape_fielding %>% #This is stupid; us and the Legends are the only teams that record fielding stats
+  janitor::row_to_names(row_number = 1) %>%
+  mutate(
+    across(.cols = c(G, GS, TC, PO, A, E, DP, SBA, CS, PB), .fns = as.integer),
+    across(.cols = c(`FLD%`, `CS%`, INN), .fns = as.double)
+  ) %>%
+  replace(is.na(.), 0) %>% #all numeric values that should be 0 are now 0 and not NA
+  filter(Name != "Overall Stats")
+
+
+nmtbl_pitch <- nmtbl_scrape_pitching %>%
+  janitor::row_to_names(row_number = 1) %>%
+  mutate(
+    across(.cols = c(G, GS, CG, SHO, W, L, SV, SVO, BF, H, R, ER, HR, HBP, BB, IBB, SO, SacF, SacB, BK, B, S, PC, WP, CI), .fns = as.integer),
+    across(.cols = c(INN, WHIP, OBA, ERA), .fns = as.double)
+  ) %>%
+  replace(is.na(.), 0) %>% #all numeric values that should be 0 are now 0 and not NA
+  filter(Name != "Overall Stats")
+
+```
+
+```{r batting_runs, include=FALSE}
+## BATTING RUNS (wOBA, wRAA (BAT))
+### NMTBL
+nmtbl <- nmtbl %>%
+  mutate(
+    `1B` = (H - `2B` - `3B` - HR), #make singles column, which is every hit that's not a 2/3/4B
+    
+    wOBA = (fg_scrape[1, ]$wBB*BB +
+              fg_scrape[1, ]$wHBP*HBP +
+              fg_scrape[1, ]$w1B*`1B` +
+              fg_scrape[1, ]$w2B*`2B` +
+              fg_scrape[1, ]$w3B*`3B` +
+              fg_scrape[1, ]$wHR*HR) / #all of this, over...
+      (PA + BB + SacF + HBP)
+  )
+
+league_avg_woba <- mean(nmtbl$wOBA, na.rm=T)
+#I need the league average to calculate wRAA: ((wOBA-League wOBA)/wOBA Scale)*PA
+
+nmtbl <- nmtbl %>%
+  mutate("wRAA (Batting Runs)" = ((wOBA - league_avg_woba) / wobascale) * PA)
+
+### MABL
+mabl <- mabl %>%
+  mutate(
+    `1B` = (H - `2B` - `3B` - HR), #make singles column, which is every hit that's not a 2/3/4B
+    
+    wOBA = (fg_scrape[1, ]$wBB*BB +
+              fg_scrape[1, ]$wHBP*HBP +
+              fg_scrape[1, ]$w1B*`1B` +
+              fg_scrape[1, ]$w2B*`2B` +
+              fg_scrape[1, ]$w3B*`3B` +
+              fg_scrape[1, ]$wHR*HR) / #all of this, over...
+      (PA + BB + SacF + HBP)
+  )
+
+league_avg_woba <- mean(mabl$wOBA, na.rm=T)
+#I need the league average to calculate wRAA: ((wOBA-League wOBA)/wOBA Scale)*PA
+
+mabl <- mabl %>%
+  filter(Team == "Sea Donkeys" |
+           Team == "Babycakes" |
+           Team == "Expos" |
+           Team == "Giants" |
+           Team == "Saints" |
+           Team == "Bombers" |
+           Team == "Milkmen" |
+           Team == "Hippos" |
+           Team == "Cardinals" |
+           Team == "Coyotes" |
+           Team == "Tomcats" |
+           Team == "Legends" |
+           Team == "North Stars" |
+           Team == "Bats" |
+           Team == "Colts" |
+           Team == "Sweepers") %>% #need to filter for only 18+ teams. 
+  #This can absolutely be done with the filter on the website, then scraping THAT url, but I am doing that later.
+  mutate("wRAA (Batting Runs)" = ((wOBA - league_avg_woba) / wobascale) * PA)
+```
+
+```{r baserunning_runs, include=FALSE}
+#All UBR is set to 0, because I am not going to bother with it. This assumes
+#all of our baserunners are simply okay.
+
+mabl_lgwSB <- ((sum(mabl$SB) * runSB) + (sum(mabl$CS) * runCS)) / 
+                   (sum(mabl$`1B`) + sum(mabl$BB) + sum(mabl$HBP))
+#League stolen base runs (lgwSB): (SB * runSB + CS * runCS) / (1B + BB + HBP – IBB)
+
+mabl <- mabl %>%
+  mutate(wSB = (SB * runSB) + (CS * runCS) - (mabl_lgwSB * (`1B` + BB + HBP)))
+
+
+
+
+nmtbl_lgwSB <- ((sum(nmtbl$SB) * runSB) + (sum(nmtbl$CS) * runCS)) / 
+                   (sum(nmtbl$`1B`) + sum(nmtbl$BB) + sum(nmtbl$HBP))
+#League stolen base runs (lgwSB): (SB * runSB + CS * runCS) / (1B + BB + HBP – IBB)
+
+nmtbl <- nmtbl %>%
+  mutate(wSB = (SB * runSB) + (CS * runCS) - (nmtbl_lgwSB * (`1B` + BB + HBP)))
+
+```
+
+```{r fielding_mabl, include=FALSE}
+
+
+mabl_field <- mabl_field %>%
+  filter(TC>0) %>%
+  mutate(Posn = case_when(
+    Name == "Backus, Matt" ~ 'C', #manually fixing the Babycake positions since we don't have them uploaded to TCMABL lmao
+    Name == "Everett, Max" ~ '2B',
+    Name == 'Peterson, Noah' ~ '2B',
+    Name == 'Becker, Isaac' ~ '1B',
+    Name == 'Birno, Blake' ~ '2B',
+    Name == 'Cannon, Josh' ~ 'CF',
+    Name == 'Cernohous, Pierce' ~ '1B',
+    Name == "Everett, Sam" ~ 'LF',
+    Name == "Fraenkel, Gaylen" ~ 'LF',
+    Name == "Hebel, Ross" ~ 'SS',
+    Name == "Jahnke, Jaden" ~ '2B',
+    Name == "Leupold, Oliver" ~ '3B',
+    Name == "Nelson, Thomas" ~ '1B',
+    Name == "Nyasende, Nic" ~ 'RF',
+    Name == "Ombori, Henry" ~ 'RF',
+    Name == "Schaffner, Taydan" ~ 'SS',
+    Name == "Steingas, Evan" ~ '2B',
+    Name == "Wetmore, Adam" ~ '3B',
+    
+    .default = Posn),
+    
+    PosRunValue = case_when( #These are generally accepted values that I got off FanGraphs' blog.
+    Posn == "C" ~ 12.5,
+    Posn == "1B" ~ -12.5,
+    Posn == "2B" ~ 2.5,
+    Posn == "SS" ~ 7.5,
+    Posn == "3B" ~ 2.5,
+    Posn == "LF" ~ -7.5,
+    Posn == "RF" ~ -7.5,
+    Posn == "CF" ~ 2.5,
+    Posn == "DH" ~ -17.5,
+    .default = 0
+  ),
+  PosAdj = (G)/mabl_games_played * PosRunValue * (mabl_total_games/162)
+  )
+
+
+mabl_average_fpct <- mean(mabl_field$`FLD%`)
+
+mabl_field <- mabl_field %>%
+  mutate(fielding_runs = (`FLD%` - mabl_average_fpct) * .8 * G)
+  #zero this out for the time being just to check things over
+
+#Here's what we did here:
+# - Made a "replacement runs per PA" stat that roughly tracks the MLB
+#   - Subnote on this: the actual R/PA in the TCMABL is like 0.17, which is nuts but reflects the fact that we have lots of runs and not lots of PAs
+# - Made "replacement" per-person for their own amount of PAs, i.e. "is this guy a better batter than someone with an identical amount of PAs?"
+# - "replacement runs" being a flat number no longer matters
+# - back to actual RPW formula. Hooray.
+
+mabl_RPA <- sum(mabl$R) / sum(mabl$PA)
+mabl_replacement_per_pa <- 20 / 600 #20 runs over 600 pas? We'll probably have to change this
+
+mabl <- mabl %>%
+  mutate(M_replacement_runs = mabl_replacement_per_pa * PA)
+
+mabl_war <- left_join(mabl, mabl_field %>%
+                    select(Name, No, Team, PosAdj, fielding_runs),
+                  by = c("Name", "No", "Team"),
+                  multiple = "first") %>% #If you play multiple positions we do not care, you are the same dude
+  replace(is.na(.), 0) #If you were not in the fielding dataset you get no fielding points
+
+
+
+mabl_replacement_runs <- 0 
+#10*(mabl_total_games/162)*((mabl_games_played)/mabl_total_games)
+#this is a flat number per guy, regardless of playing time. Should it be?
+
+#Note: This 10 was formerly 20 to match the below note.
+#20 runs in 162 games is the per-player replacement level, so we scale back to however many games we have in a season
+mabl_runs_per_win <- 
+  2 * (sum(mabl$R) / (mabl_teams * mabl_games_played)) # #Change for scaled WAR values
+  #10 
+#MLB average. Makes WAR more intuitive for short seasons like ours.
+
+
+#PosAdj = (Innings / 9) / team games_played * PosRunValue * (total_games / 162)
+```
+
+```{r fielding_nmtbl, include=FALSE}
+
+
+nmtbl_field <- nmtbl_field %>%
+  filter(TC>0) %>% #literally "Have you touched a baseball"
+  mutate(Posn = case_when(
+    Name == "Backus, Matt" ~ 'C', #manually fixing the Babycake positions since we don't have them uploaded to NMTBL lmao
+    Name == "Everett, Max" ~ '2B',
+    Name == 'Peterson, Noah' ~ '2B',
+    Name == 'Becker, Isaac' ~ '1B',
+    Name == 'Birno, Blake' ~ '2B',
+    Name == 'Cannon, Josh' ~ 'CF',
+    Name == 'Cernohous, Pierce' ~ '1B',
+    Name == "Everett, Sam" ~ 'LF',
+    Name == "Fraenkel, Gaylen" ~ 'LF',
+    Name == "Hebel, Ross" ~ 'SS',
+    Name == "Jahnke, Jaden" ~ '2B',
+    Name == "Leupold, Oliver" ~ '3B',
+    Name == "Nelson, Thomas" ~ '1B',
+    Name == "Nyasende, Nic" ~ 'RF',
+    Name == "Ombori, Henry" ~ 'RF',
+    Name == "Schaffner, Taydan" ~ 'SS',
+    Name == "Steingas, Evan" ~ '2B',
+    Name == "Wetmore, Adam" ~ '3B',
+    
+    .default = Posn),
+    
+    PosRunValue = case_when(
+    Posn == "C" ~ 12.5,
+    Posn == "1B" ~ -12.5,
+    Posn == "2B" ~ 2.5,
+    Posn == "SS" ~ 7.5,
+    Posn == "3B" ~ 2.5,
+    Posn == "LF" ~ -7.5,
+    Posn == "RF" ~ -7.5,
+    Posn == "CF" ~ 2.5,
+    Posn == "DH" ~ -17.5,
+    .default = 0
+  ),
+  PosAdj = (G)/nmtbl_games_played * PosRunValue * (nmtbl_total_games/162)
+  )
+
+
+nmtbl_average_fpct <- mean(nmtbl_field$`FLD%`)
+
+nmtbl_field <- nmtbl_field %>%
+  mutate(fielding_runs = (`FLD%` - nmtbl_average_fpct) * .8 * G)
+
+#Here's what we did here:
+# - Made a "replacement runs per PA" stat that roughly tracks the MLB
+#   - Subnote on this: the actual R/PA in the TCMABL is like 0.17, which is nuts but reflects the fact that we have lots of runs and not lots of PAs
+# - Made "replacement" per-person for their own amount of PAs, i.e. "is this guy a better batter than someone with an identical amount of PAs?"
+# - "replacement runs" being a flat number no longer matters
+# - back to actual RPW formula. Hooray.
+
+nmtbl_RPA <- sum(nmtbl$R) / sum(nmtbl$PA)
+nmtbl_replacement_per_pa <- 20 / 600 #20 runs over 600 pas? We'll probably have to change this
+
+nmtbl <- nmtbl %>%
+  mutate(M_replacement_runs = nmtbl_replacement_per_pa * PA)
+
+### End edit.
+
+
+nmtbl_replacement_runs <- 0 #10*(nmtbl_total_games/162)*((nmtbl_games_played)/nmtbl_total_games)
+#20 runs in 162 games is the per-player replacement level, so we scale back to however many games we have in a season
+nmtbl_runs_per_win <- 
+  2 * (sum(nmtbl$R) / (nmtbl_teams * nmtbl_games_played)) #Change for scaled WAR values
+  #10 
+#MLB average. Makes WAR more intuitive for short seasons like ours.
+
+
+#PosAdj = (Innings / 9) / team games_played * PosRunValue * (total_games / 162)
+```
+
+
+
+```{r nmtbl_pitch, include=FALSE}
+# FIP Constant = lgERA – (((13*lgHR)+(3*(lgBB+lgHBP))-(2*lgK))/lgIP)
+nmtbl_FIPc <- (mean(nmtbl_pitch$ERA) - 
+                 (((13*mean(nmtbl_pitch$HR))+
+                     (3*(mean(nmtbl_pitch$BB)+mean(nmtbl_pitch$HBP)))-
+                     (2*mean(nmtbl_pitch$SO)))/
+                    mean(nmtbl_pitch$INN)))
+
+# FIP = ((13*HR)+(3*(BB+HBP))-(2*K))/IP + constant
+
+nmtbl_pitch <- nmtbl_pitch %>%
+  mutate(FIP = ((13*HR)+(3*(BB+HBP))-(2*SO))/INN + nmtbl_FIPc,
+         RA9 = R / (INN/9)) %>%
+  filter(FIP > 0)
+
+nmtbl_ra9_c <- mean(nmtbl_pitch$FIP) - mean(nmtbl_pitch$ERA)
+
+nmtbl_pitch <- nmtbl_pitch %>%
+  mutate(FIPR9 = FIP - nmtbl_ra9_c)
+
+nmtbl_fipr9 <- mean(nmtbl_pitch$FIPR9)
+
+nmtbl_pitch <- nmtbl_pitch %>%
+  mutate(RAAP9 = nmtbl_fipr9 - FIPR9,
+         #Dynamic RPW (dRPW) = ([([(18 – IP/G)*(AL or NL FIPR9)] + [(IP/G)*pFIPR9]) / 18] + 2)*1.5
+         dRPW = (((((18 - INN/G)*(nmtbl_fipr9)) + ((INN/G)*FIPR9) / 18) + 2)*1.5),
+         #Wins Per Game Above Average (WPGAA) = RAAP9 / dRPW
+         WPGAA = RAAP9 / dRPW, #Which is the pitcher’s performance relative to league average.
+         ReplacementLevel = 0.03*(1 - GS/G) + 0.12*(GS/G),
+         WPGAR = WPGAA + ReplacementLevel,
+         pitchWAR = WPGAR * (INN/9)) 
+```
+
+```{r mabl_pitch, include=FALSE}
+# FIP Constant = lgERA – (((13*lgHR)+(3*(lgBB+lgHBP))-(2*lgK))/lgIP)
+mabl_FIPc <- (mean(mabl_pitch$ERA) - 
+                 (((13*mean(mabl_pitch$HR))+
+                     (3*(mean(mabl_pitch$BB)+mean(mabl_pitch$HBP)))-
+                     (2*mean(mabl_pitch$SO)))/
+                    mean(mabl_pitch$INN)))
+
+# FIP = ((13*HR)+(3*(BB+HBP))-(2*K))/IP + constant
+
+mabl_pitch <- mabl_pitch %>%
+  mutate(FIP = ((13*HR)+(3*(BB+HBP))-(2*SO))/INN + mabl_FIPc,
+         RA9 = R / (INN/9)) %>%
+  filter(is.finite(FIP), INN > 0)
+
+mabl_ra9_c <- mean(mabl_pitch$FIP) - mean(mabl_pitch$ERA)
+
+mabl_pitch <- mabl_pitch %>%
+  mutate(FIPR9 = FIP - mabl_ra9_c)
+
+mabl_fipr9 <- mean(mabl_pitch$FIPR9)
+
+mabl_pitch <- mabl_pitch %>%
+  mutate(RAAP9 = mabl_fipr9 - FIPR9,
+         #Dynamic RPW (dRPW) = ([([(18 – IP/G)*(AL or NL FIPR9)] + [(IP/G)*pFIPR9]) / 18] + 2)*1.5
+         dRPW = (((((18 - INN/G)*(mabl_fipr9)) + ((INN/G)*FIPR9) / 18) + 2)*1.5),
+         #Wins Per Game Above Average (WPGAA) = RAAP9 / dRPW
+         WPGAA = RAAP9 / dRPW, #Which is the pitcher’s performance relative to league average.
+         ReplacementLevel = 0.03*(1 - GS/G) + 0.12*(GS/G),
+         WPGAR = WPGAA + ReplacementLevel,
+         pitchWAR = WPGAR * (INN/9)) 
+```
+
+# TCMABL: WAR
+## Games Played: `r mabl_games_played` of `r mabl_total_games`
+
+```{r mabl_war_1, include=FALSE}
+
+mabl_war <- left_join(mabl, mabl_field %>%
+                    select(Name, No, Team, PosAdj, fielding_runs),
+                  by = c("Name", "No", "Team"),
+                  multiple = "first") %>%
+  replace(is.na(.), 0) #If you were not in the fielding dataset you get no fielding points
+
+mabl_war <- left_join(mabl_war, mabl_pitch %>%
+                         select(Name, No, Team, WHIP, ERA, FIP, pitchWAR),
+                       by = c("Name", "No", "Team"),
+                       multiple = "first") %>%
+  replace(is.na(.), 0) #If you were not in the pitching dataset you get no pitching points
+
+mabl_war <- mabl_war %>%
+  mutate(nordWAR = ((`wRAA (Batting Runs)` + wSB + fielding_runs +
+           PosAdj - mabl_replacement_runs) / (mabl_runs_per_win)) + pitchWAR,
+         WPG = nordWAR / G,
+         WvRep = (
+      (`wRAA (Batting Runs)` + wSB + fielding_runs + PosAdj) - (mabl_replacement_per_pa * PA)
+    ) / mabl_runs_per_win,
+
+    WvA = (
+      ((`wRAA (Batting Runs)` + wSB + fielding_runs + PosAdj)
+    ) / mabl_runs_per_win) + pitchWAR,
+
+    WPG_Rep = WvRep / G,
+    WPG_avg = WvA / G
+  )
+
+mabl_cakes_war <- mabl_war %>%
+  filter(Team == "Babycakes")%>%
+  select(No, Name, AVG, OBP, SLG, G, nordWAR, WPG, WvA, WPG_avg)
+
+mabl_cakes_pitch <- mabl_pitch %>%
+  filter(Team == "Babycakes")%>%
+  select(No, Name, G, GS, INN, W, L, ERA, RA9, FIP)
+```
+
+
+Sum of team WAR: `r sum(mabl_cakes_war$nordWAR)`, league sum/avg `r sum(mabl_war$nordWAR)` / `r mean(mabl_war$nordWAR)`
+
+| Metric                   | What it Shows                                                             |
+| ------------------------ | ------------------------------------------------------------------------- |
+| **nordWAR** | Actual WAR; wins above the "replacement" TCMABL guy.|
+| **WvA**     | Value above the league’s *average* player - not the replacement. |
+
+```{r mabl_war_2, echo=FALSE}
+as_tibble(mabl_cakes_war) %>%
+  arrange(desc(nordWAR)) %>%
+  knitr::kable(digits = 3)
+
+as_tibble(mabl_cakes_pitch) %>%
+  arrange(desc(INN)) %>%
+  knitr::kable(digits = 2)
+```
+
+\newpage
+
+```{r mabl_histograms, echo=FALSE, fig.height=4, include=FALSE}
+
+#This is essentially a sanity check to make sure WARs aren't skewed all over the place.
+
+ggplot(mabl_war) +
+  geom_histogram(aes(x = nordWAR), 
+                 fill = "red", alpha = 0.4, binwidth = 0.05, boundary = 0) +
+  geom_histogram(aes(x = WvA), 
+                 fill = "blue", alpha = 0.4, binwidth = 0.05, boundary = 0) +
+  labs(
+    title = "Distribution of WAR (MABL)",
+    x = "WAR",
+    y = "Player Count",
+    caption = "Red = WAR | Blue = WAA (Wins Against Average)"
+  )
+
+mabl_team_war <- mabl_war %>%
+  group_by(Team) %>%
+  summarise(teamWAR = sum(nordWAR))
+knitr::kable(mabl_team_war)
+
+```
+
+```{r mabl_scatters, echo=FALSE, include=FALSE}
+
+ggplot(mabl_war) +
+  geom_point(aes(x = PA, y = nordWAR), color = "red") +
+  geom_point(aes(x = PA, y = WvA), color = "blue") +
+  geom_smooth(aes(x = PA, y = nordWAR), color = "red", method = "lm", se = FALSE) +
+  geom_smooth(aes(x = PA, y = WvA), color = "blue", method = "lm", se = FALSE) +
+  labs(
+    title = "WAR vs Plate Appearances (MABL)",
+    x = "Plate Appearances",
+    y = "WAR",
+    caption = "Red = WAR | Blue = WAA (Wins Against Average)"
+  )
+```
+
+\newpage
+
+Who are we playing?
+
+The ***`r mabl_opponent_name`***
+
+```{r mabl_opp_ops, echo=FALSE}
+mabl_opp_war <- mabl_war %>%
+  filter(Team == mabl_opponent_name) %>%
+  select(No, Name, AVG, OBP, SLG, G, nordWAR, WPG, WvA, WPG_avg)
+
+as_tibble(mabl_opp_war) %>%
+  arrange(desc(nordWAR)) %>%
+  knitr::kable(digits = 3)
+```
+
+```{r mabl_opponent_pitchers, echo=FALSE}
+
+mabl_opp_pitch <- mabl_pitch %>%
+  filter(Team == mabl_opponent_name) %>%
+  select(No, Name, G, GS, INN, W, L, ERA, RA9, FIP)
+
+as_tibble(mabl_opp_pitch) %>%
+  arrange(desc(INN)) %>%
+  knitr::kable(digits = 2)
+
+```
+
+\newpage
+
+# NMTBL: WAR
+## Games Played: `r nmtbl_games_played` of `r nmtbl_total_games`
+
+```{r nmtbl_war_1, include=FALSE}
+#So I believe I have what I need.
+
+nmtbl_war <- left_join(nmtbl, nmtbl_field %>%
+                    select(Name, No, Team, PosAdj, fielding_runs),
+                  by = c("Name", "No", "Team"),
+                  multiple = "first") %>%
+  replace(is.na(.), 0) #If you were not in the fielding dataset you get no fielding points
+
+nmtbl_war <- left_join(nmtbl_war, nmtbl_pitch %>%
+                         select(Name, No, Team, WHIP, ERA, FIP, pitchWAR),
+                       by = c("Name", "No", "Team"),
+                       multiple = "first") %>%
+  replace(is.na(.), 0) #If you were not in the pitching dataset you get no pitching points
+
+nmtbl_war <- nmtbl_war %>%
+  mutate(nordWAR = ((`wRAA (Batting Runs)` + wSB + fielding_runs +
+           PosAdj - nmtbl_replacement_runs) / (nmtbl_runs_per_win)) + pitchWAR,
+         WPG = nordWAR / G,
+         WvRep = (
+      (`wRAA (Batting Runs)` + wSB + fielding_runs + PosAdj) - (mabl_replacement_per_pa * PA)
+    ) / mabl_runs_per_win,
+
+    WvA = (
+      ((`wRAA (Batting Runs)` + wSB + fielding_runs + PosAdj)
+    ) / mabl_runs_per_win) + pitchWAR,
+
+    WPG_Rep = WvRep / G,
+    WPG_avg = WvA / G
+  )
+
+nmtbl_cakes_war <- nmtbl_war %>%
+  filter(Team == "Bloomington Babycakes")
+
+nmtbl_cakes_pitch <- nmtbl_pitch %>%
+  filter(Team == "Bloomington Babycakes")
+```
+
+Sum of team WAR: `r sum(nmtbl_cakes_war$nordWAR)`, league sum/avg `r sum(nmtbl_war$nordWAR)` / `r mean(nmtbl_war$nordWAR)`
+
+| Metric                   | What it Shows                                                             |
+| ------------------------ | ------------------------------------------------------------------------- |
+| **nordWAR** | Actual WAR; wins above the "replacement" NMTBL guy.|
+| **WvA**     | Value above the league’s *average* player - not the replacement. |
+
+```{r nmtbl_war_2, echo=FALSE}
+as_tibble(nmtbl_cakes_war) %>%
+  select(No, Name, AVG, OBP, SLG, G, nordWAR, WPG, WvA, WPG_avg) %>%
+  arrange(desc(nordWAR)) %>%
+  knitr::kable(digits = 3)
+
+as_tibble(nmtbl_cakes_pitch) %>%
+  select(No, Name, G, GS, INN, W, L, ERA, RA9, FIP) %>%
+  arrange(desc(INN)) %>%
+  knitr::kable(digits = 2)
+```
+
+
+\newpage
+
+Who are we playing?
+
+The ***`r nmtbl_opponent_name`***
+
+
+```{r nmtbl_opp_ops, echo=FALSE}
+nmtbl_opp_war <- nmtbl_war %>%
+  filter(Team == nmtbl_opponent_name) %>%
+  select(No, Name, AVG, OBP, SLG, G, nordWAR, WPG, WvA, WPG_avg)
+
+as_tibble(nmtbl_opp_war) %>%
+  arrange(desc(nordWAR)) %>%
+  knitr::kable(digits = 3)
+```
+
+Their pitchers:
+
+```{r nmtbl_opponent_pitchers, echo=FALSE}
+
+nmtbl_opp_pitch <- nmtbl_pitch %>%
+  filter(Team == nmtbl_opponent_name) %>%
+  select(No, Name, G, GS, INN, W, L, ERA, RA9, FIP)
+
+as_tibble(nmtbl_opp_pitch) %>%
+  arrange(desc(INN)) %>%
+  knitr::kable(digits = 2)
+
+```
+
+
+\newpage
+
+```{r nmtbl_histograms, echo=FALSE, fig.height=3, include=FALSE}
+
+#league WAR vs WAA plot
+ggplot(nmtbl_war) +
+  geom_histogram(aes(x = nordWAR), 
+                 fill = "red", alpha = 0.4, binwidth = 0.05, boundary = 0) +
+  geom_histogram(aes(x = WvA), 
+                 fill = "blue", alpha = 0.4, binwidth = 0.05, boundary = 0) +
+  labs(
+    title = "Distribution of WAR (nmtbl)",
+    x = "WAR",
+    y = "Player Count",
+    caption = "Red = WAR | Blue = WAA (Wins Against Average)"
+  )
+
+#table of teams
+nmtbl_team_war <- nmtbl_war %>%
+  group_by(Team) %>%
+  summarise(teamWAR = sum(nordWAR))
+knitr::kable(nmtbl_team_war)
+```
+
+```{r nmtbl_scatterplots, echo=FALSE, include=FALSE}
+#WAR and WAA vs PAs
+
+ggplot(nmtbl_war) +
+  geom_point(aes(x = PA, y = nordWAR), color = "red") +
+  geom_point(aes(x = PA, y = WvA), color = "blue") +
+  geom_smooth(aes(x = PA, y = nordWAR), color = "red", method = "lm", se = FALSE) +
+  geom_smooth(aes(x = PA, y = WvA), color = "blue", method = "lm", se = FALSE) +
+  labs(
+    title = "WAR vs Plate Appearances (nmtbl)",
+    x = "Plate Appearances",
+    y = "WAR",
+    caption = "Red = WAR | Blue = WAA (Wins Against Average)"
+  )
+
+
+
+```
+
+\newpage
+
+# Two-League Babycake WARs
+
+```{r two_leagues_merge_into_one, echo=FALSE}
+
+# Manually patch team name to match NMTBL
+mabl_war_fixed <- mabl_war %>%
+  mutate(Team = ifelse(Team == "Babycakes", "Bloomington Babycakes", Team)) 
+  #if team is other-league Babycakes, change name to match. Otherwise I do not care
+
+# Join MABL and NMTBL data
+both_leagues <- left_join(
+  mabl_war_fixed,
+  nmtbl_war,
+  by = c("Name", "No", "Team"),
+  suffix = c("_mabl", "_nmtbl"),
+  multiple = "first" 
+) %>%
+  replace(is.na(.), 0)
+
+# Combine stats
+both_leagues <- both_leagues %>%
+  mutate(
+    total_nordWAR = coalesce(nordWAR_mabl, 0) + coalesce(nordWAR_nmtbl, 0),
+    AVG = rowMeans(cbind(AVG_mabl, AVG_nmtbl), na.rm = TRUE),
+    OBP = rowMeans(cbind(OBP_mabl, OBP_nmtbl), na.rm = TRUE),
+    SLG = rowMeans(cbind(SLG_mabl, SLG_nmtbl), na.rm = TRUE),
+    G = G_mabl + G_nmtbl,
+    WPG = total_nordWAR / G
+  ) %>%
+  select(No, Name, Team, AVG, OBP, SLG, G, 
+         #G_mabl, G_nmtbl, 
+         #nordWAR_mabl, nordWAR_nmtbl, 
+         total_nordWAR, WPG)
+
+# Show only Babycakes (original MABL name)
+cakes_two <- both_leagues %>%
+  filter(Team == "Bloomington Babycakes") %>%
+  mutate(Team = "Babycakes") %>%
+  as_tibble() %>%
+  select(-c(Team))
+
+cakes_two %>%
+  arrange(desc(total_nordWAR)) %>%
+  knitr::kable(digits = 3)
+
+#There's something up with this: the math is *close enough* to the actual stats 
+#we keep on the GameChanger but is not perfect. I will have to tweak this sometime.
+
+
+```
+
+```{r two_pitch, echo=FALSE}
+
+# Fix MABL team name to match NMTBL for joining
+mabl_pitch_fixed <- mabl_pitch %>%
+  mutate(Team = ifelse(Team == "Babycakes", "Bloomington Babycakes", Team))
+
+# Join pitching stats across leagues
+both_pitching <- left_join(
+  mabl_pitch_fixed,
+  nmtbl_pitch,
+  by = c("Name", "No", "Team"),
+  suffix = c("_mabl", "_nmtbl"),
+  multiple = "first"
+) %>%
+  replace(is.na(.), 0)
+
+# Combine core pitching stats
+both_pitching <- both_pitching %>%
+  mutate(
+    total_INN = INN_mabl + INN_nmtbl,
+    total_pitchWAR = coalesce(pitchWAR_mabl, 0) + coalesce(pitchWAR_nmtbl, 0),
+    ERA = rowMeans(cbind(ERA_mabl, ERA_nmtbl), na.rm = TRUE),
+    FIP = rowMeans(cbind(FIP_mabl, FIP_nmtbl), na.rm = TRUE),
+    WHIP = rowMeans(cbind(WHIP_mabl, WHIP_nmtbl), na.rm = TRUE),
+    G = G_mabl + G_nmtbl,
+    GS = GS_mabl + GS_nmtbl,
+    W = W_mabl + W_nmtbl,
+    L = L_mabl + L_nmtbl
+  ) %>%
+  select(No, Name, Team, G, GS, INN = total_INN, W, L, ERA, FIP, WHIP, MABL = pitchWAR_mabl, NMTBL = pitchWAR_nmtbl, pitchWAR = total_pitchWAR)
+
+# Only Babycakes pitchers
+pitching_two <- both_pitching %>%
+  filter(Team == "Bloomington Babycakes") %>%
+  mutate(Team = "Babycakes") %>%
+  select(-Team) %>%
+  arrange(desc(INN))
+
+pitching_two %>%
+  knitr::kable(digits = 2)
+
+```
+
+\newpage
+
+#WAR Breakdown (Bat v. Pitch), MABL
+
+```{r echo=FALSE, include=FALSE}
+# This would actually be a completely reasonable implementation. It would probably get rid of WvA, since it seems redundant.
+# This is just the MABL batters/pitchers. But it would leak into both_leagues, since we would literally change the WAR calc chunks. Kind of scary, and maybe not necessary.
+
+mabl_war %>%
+  mutate(
+    batWAR = (`wRAA (Batting Runs)` + wSB + fielding_runs + PosAdj - M_replacement_runs) / mabl_runs_per_win,
+    nordWAR = batWAR + pitchWAR,
+    WPG = nordWAR / G
+  ) %>%
+  filter(Team == "Babycakes") %>%
+  select(No, Name, AVG, OBP, SLG, G, batWAR, pitchWAR, nordWAR, WPG) %>%
+  arrange(desc(nordWAR)) %>%
+  knitr::kable(digits = 3)
+```
+
