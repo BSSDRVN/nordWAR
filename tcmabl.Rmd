@@ -30,7 +30,7 @@ nmtbl_fielding_url <- "https://www.nmtbl.com/teams/default.asp?p=stats&viewseas=
 nmtbl_pitching_url <- "https://www.nmtbl.com/teams/default.asp?p=stats&viewseas=Summer_2025&cat=Pitching&u=NMTBL&s=baseball&t=print"
 
 #Current URL for the FanGraphs guts page
-fangraphs_guts_url <- "https://www.fangraphs.com/guts.aspx?type=cn"
+fangraphs_guts_url <- "https://www.fangraphs.com/tools/guts?type=cn"
 ```
 
 ```{r scrape_websites, include=FALSE}
@@ -76,38 +76,50 @@ nmtbl_scrape_pitching <- read_html(nmtbl_pitching_url) %>% #reads thru the page
   .[[1]] %>%
   as_tibble(.name_repair = "unique", header = TRUE)
 
+### This was broken sometime during Jul 2025. Fix soon!
+
 #scraping fangraphs website for guts constants (FIP, wOBA)
-fg_scrape <- read_html(fangraphs_guts_url) %>%
-  html_nodes("table") %>% #searches for table nodes
-  .[10] %>% #picks the tenth one from the list, in our case the guts table
-  html_table() %>% #
-  .[[1]] %>% #selects the table from the console
-  as_tibble(.name_repair = "unique", header = TRUE)
+#fg_scrape <- read_html(fangraphs_guts_url) %>%
+#  html_nodes("table") %>% #searches for table nodes
+#  .[10] %>% #picks the tenth one from the list, in our case the guts table
+#  html_table() %>% #
+#  .[[1]] %>% #selects the table from the console
+#  as_tibble(.name_repair = "unique", header = TRUE)
 ```
 
 ```{r set_constants, include=FALSE}
 ### SET GAMES PLAYED, PARK FACTOR, ASSUMPTIONS ETC ###
-mabl_games_played <- 16
+mabl_games_played <- 18
 mabl_total_games <- 22
 mabl_teams <- 16
-mabl_opponent_name <- "Milkmen"
+mabl_opponent_name <- "Tomcats"
 
 mabl_total_season_wins_overall <- ((mabl_games_played * mabl_teams) /2)
 
 nmtbl_games_played <- 12
 nmtbl_total_games <- 14
 nmtbl_teams <- 12
-nmtbl_opponent_name <- "Legends"
+nmtbl_opponent_name <- "Colt 45's"
 
 nmtbl_total_season_wins_overall <- ((nmtbl_games_played * nmtbl_teams) /2)
 
 park_factor <- 1
-wobascale <- fg_scrape[1, ]$wOBAScale #first row's wobascale column
+wobascale <- 1.24 #static for 2025
+  #fg_scrape[1, ]$wOBAScale #first row's wobascale column
 
 runCS <- -.3 #How bad does it affect a player to be caught stealing? (FG says -(2 x RunsPerOut + 0.075).)
 runSB <- .2 #How well does it affect a player to steal a base? (FG says set this at 0.2.)
 
-RPW_FG <- fg_scrape[1, ]$`R/W`
+RPW_FG <- 9.692
+  #fg_scrape[1, ]$`R/W`
+
+#other FanGraphs constants, manually updated *sigh*
+wBB <- .692
+wHBP <- .723
+w1B <- .885
+w2B <- 1.257
+w3B <- 1.592
+wHR <- 2.05
 ```
 
 ```{r make_row_headers, include=FALSE}
@@ -171,12 +183,12 @@ nmtbl <- nmtbl %>%
   mutate(
     `1B` = (H - `2B` - `3B` - HR), #make singles column, which is every hit that's not a 2/3/4B
     
-    wOBA = (fg_scrape[1, ]$wBB*BB +
-              fg_scrape[1, ]$wHBP*HBP +
-              fg_scrape[1, ]$w1B*`1B` +
-              fg_scrape[1, ]$w2B*`2B` +
-              fg_scrape[1, ]$w3B*`3B` +
-              fg_scrape[1, ]$wHR*HR) / #all of this, over...
+    wOBA = (wBB*BB +
+              wHBP*HBP +
+              w1B*`1B` +
+              w2B*`2B` +
+              w3B*`3B` +
+              wHR*HR) / #all of this, over...
       (PA + BB + SacF + HBP)
   )
 
@@ -191,12 +203,12 @@ mabl <- mabl %>%
   mutate(
     `1B` = (H - `2B` - `3B` - HR), #make singles column, which is every hit that's not a 2/3/4B
     
-    wOBA = (fg_scrape[1, ]$wBB*BB +
-              fg_scrape[1, ]$wHBP*HBP +
-              fg_scrape[1, ]$w1B*`1B` +
-              fg_scrape[1, ]$w2B*`2B` +
-              fg_scrape[1, ]$w3B*`3B` +
-              fg_scrape[1, ]$wHR*HR) / #all of this, over...
+    wOBA = (wBB*BB +
+              wHBP*HBP +
+              w1B*`1B` +
+              w2B*`2B` +
+              w3B*`3B` +
+              wHR*HR) / #all of this, over...
       (PA + BB + SacF + HBP)
   )
 
