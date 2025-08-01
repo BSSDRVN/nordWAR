@@ -96,7 +96,7 @@ mabl_opponent_name <- "Tomcats"
 
 mabl_total_season_wins_overall <- ((mabl_games_played * mabl_teams) /2)
 
-nmtbl_games_played <- 12
+nmtbl_games_played <- 13
 nmtbl_total_games <- 14
 nmtbl_teams <- 12
 nmtbl_opponent_name <- "Colt 45's"
@@ -400,7 +400,12 @@ nmtbl_field <- nmtbl_field %>%
 # - back to actual RPW formula. Hooray.
 
 nmtbl_RPA <- sum(nmtbl$R) / sum(nmtbl$PA)
+
+#See?
+
 nmtbl_replacement_per_pa <- 20 / 600 #20 runs over 600 pas? We'll probably have to change this
+
+#This should actually be the real RPA, but making it the actual number made everyone's stat negative, because only like 3-5 guys from each team hit a disproportionate amount of the runs
 
 nmtbl <- nmtbl %>%
   mutate(M_replacement_runs = nmtbl_replacement_per_pa * PA)
@@ -467,7 +472,7 @@ mabl_FIPc <- (mean(mabl_pitch$ERA) -
 mabl_pitch <- mabl_pitch %>%
   mutate(FIP = ((13*HR)+(3*(BB+HBP))-(2*SO))/INN + mabl_FIPc,
          RA9 = R / (INN/9)) %>%
-  filter(is.finite(FIP), INN > 0)
+  filter(is.finite(FIP), INN > 0) #No infinite FIPs. I hate that.
 
 mabl_ra9_c <- mean(mabl_pitch$FIP) - mean(mabl_pitch$ERA)
 
@@ -545,46 +550,6 @@ as_tibble(mabl_cakes_war) %>%
 as_tibble(mabl_cakes_pitch) %>%
   arrange(desc(INN)) %>%
   knitr::kable(digits = 2)
-```
-
-\newpage
-
-```{r mabl_histograms, echo=FALSE, fig.height=4, include=FALSE}
-
-#This is essentially a sanity check to make sure WARs aren't skewed all over the place.
-
-ggplot(mabl_war) +
-  geom_histogram(aes(x = nordWAR), 
-                 fill = "red", alpha = 0.4, binwidth = 0.05, boundary = 0) +
-  geom_histogram(aes(x = WvA), 
-                 fill = "blue", alpha = 0.4, binwidth = 0.05, boundary = 0) +
-  labs(
-    title = "Distribution of WAR (MABL)",
-    x = "WAR",
-    y = "Player Count",
-    caption = "Red = WAR | Blue = WAA (Wins Against Average)"
-  )
-
-mabl_team_war <- mabl_war %>%
-  group_by(Team) %>%
-  summarise(teamWAR = sum(nordWAR))
-knitr::kable(mabl_team_war)
-
-```
-
-```{r mabl_scatters, echo=FALSE, include=FALSE}
-
-ggplot(mabl_war) +
-  geom_point(aes(x = PA, y = nordWAR), color = "red") +
-  geom_point(aes(x = PA, y = WvA), color = "blue") +
-  geom_smooth(aes(x = PA, y = nordWAR), color = "red", method = "lm", se = FALSE) +
-  geom_smooth(aes(x = PA, y = WvA), color = "blue", method = "lm", se = FALSE) +
-  labs(
-    title = "WAR vs Plate Appearances (MABL)",
-    x = "Plate Appearances",
-    y = "WAR",
-    caption = "Red = WAR | Blue = WAA (Wins Against Average)"
-  )
 ```
 
 \newpage
@@ -684,7 +649,6 @@ Who are we playing?
 
 The ***`r nmtbl_opponent_name`***
 
-
 ```{r nmtbl_opp_ops, echo=FALSE}
 nmtbl_opp_war <- nmtbl_war %>%
   filter(Team == nmtbl_opponent_name) %>%
@@ -712,49 +676,6 @@ as_tibble(nmtbl_opp_pitch) %>%
 
 \newpage
 
-```{r nmtbl_histograms, echo=FALSE, fig.height=3, include=FALSE}
-
-#league WAR vs WAA plot
-ggplot(nmtbl_war) +
-  geom_histogram(aes(x = nordWAR), 
-                 fill = "red", alpha = 0.4, binwidth = 0.05, boundary = 0) +
-  geom_histogram(aes(x = WvA), 
-                 fill = "blue", alpha = 0.4, binwidth = 0.05, boundary = 0) +
-  labs(
-    title = "Distribution of WAR (nmtbl)",
-    x = "WAR",
-    y = "Player Count",
-    caption = "Red = WAR | Blue = WAA (Wins Against Average)"
-  )
-
-#table of teams
-nmtbl_team_war <- nmtbl_war %>%
-  group_by(Team) %>%
-  summarise(teamWAR = sum(nordWAR))
-knitr::kable(nmtbl_team_war)
-```
-
-```{r nmtbl_scatterplots, echo=FALSE, include=FALSE}
-#WAR and WAA vs PAs
-
-ggplot(nmtbl_war) +
-  geom_point(aes(x = PA, y = nordWAR), color = "red") +
-  geom_point(aes(x = PA, y = WvA), color = "blue") +
-  geom_smooth(aes(x = PA, y = nordWAR), color = "red", method = "lm", se = FALSE) +
-  geom_smooth(aes(x = PA, y = WvA), color = "blue", method = "lm", se = FALSE) +
-  labs(
-    title = "WAR vs Plate Appearances (nmtbl)",
-    x = "Plate Appearances",
-    y = "WAR",
-    caption = "Red = WAR | Blue = WAA (Wins Against Average)"
-  )
-
-
-
-```
-
-\newpage
-
 # Two-League Babycake WARs
 
 ```{r two_leagues_merge_into_one, echo=FALSE}
@@ -765,7 +686,8 @@ mabl_war_fixed <- mabl_war %>%
   #if team is other-league Babycakes, change name to match. Otherwise I do not care
 
 # Join MABL and NMTBL data
-both_leagues <- left_join(
+
+both_leagues <- full_join(
   mabl_war_fixed,
   nmtbl_war,
   by = c("Name", "No", "Team"),
@@ -774,20 +696,31 @@ both_leagues <- left_join(
 ) %>%
   replace(is.na(.), 0)
 
-# Combine stats
+# Combine stats, since averaging averages never goes well
 both_leagues <- both_leagues %>%
   mutate(
-    total_nordWAR = coalesce(nordWAR_mabl, 0) + coalesce(nordWAR_nmtbl, 0),
-    AVG = rowMeans(cbind(AVG_mabl, AVG_nmtbl), na.rm = TRUE),
-    OBP = rowMeans(cbind(OBP_mabl, OBP_nmtbl), na.rm = TRUE),
-    SLG = rowMeans(cbind(SLG_mabl, SLG_nmtbl), na.rm = TRUE),
     G = G_mabl + G_nmtbl,
-    WPG = total_nordWAR / G
-  ) %>%
+    H = (H_nmtbl + H_mabl),
+    BB = (BB_mabl + BB_nmtbl),
+    AB = (AB_mabl + AB_nmtbl),
+    HR = (HR_mabl + HR_nmtbl),
+    HBP = (HBP_mabl + HBP_nmtbl),
+    `1B` = (`1B_mabl` + `1B_nmtbl`),
+    `2B` = (`2B_mabl` + `2B_nmtbl`),
+    `3B` = (`1B_mabl` + `1B_nmtbl`),
+    SacF = (SacF_mabl + SacF_nmtbl),
+    AVG = H/AB,
+    #OBP = (Hits + Walks + Hit by Pitch) / (At Bats + Walks + Hit by Pitch + Sacrifice Flies) 
+    OBP = (H + BB + HBP)/(AB+BB+HBP+SacF),
+    #SLG = (1B + 2Bx2 + 3Bx3 + HRx4)/AB
+    SLG = (`1B` + (2*`2B`) + (3*`3B`) + (4*HR)) / (AB),
+    total_nordWAR = (nordWAR_mabl + nordWAR_nmtbl),
+    WPG = (total_nordWAR / G)
+    ) %>%
   select(No, Name, Team, AVG, OBP, SLG, G, 
          #G_mabl, G_nmtbl, 
-         #nordWAR_mabl, nordWAR_nmtbl, 
-         total_nordWAR, WPG)
+         MABL = nordWAR_mabl, NMTBL = nordWAR_nmtbl, 
+         nordWAR = total_nordWAR, WPG)
 
 # Show only Babycakes (original MABL name)
 cakes_two <- both_leagues %>%
@@ -797,23 +730,20 @@ cakes_two <- both_leagues %>%
   select(-c(Team))
 
 cakes_two %>%
-  arrange(desc(total_nordWAR)) %>%
+  arrange(desc(nordWAR)) %>%
   knitr::kable(digits = 3)
-
-#There's something up with this: the math is *close enough* to the actual stats 
-#we keep on the GameChanger but is not perfect. I will have to tweak this sometime.
 
 
 ```
 
-```{r two_pitch, echo=FALSE}
+```{r two_one_pitch, echo=FALSE}
 
 # Fix MABL team name to match NMTBL for joining
 mabl_pitch_fixed <- mabl_pitch %>%
   mutate(Team = ifelse(Team == "Babycakes", "Bloomington Babycakes", Team))
 
 # Join pitching stats across leagues
-both_pitching <- left_join(
+both_pitching <- full_join(
   mabl_pitch_fixed,
   nmtbl_pitch,
   by = c("Name", "No", "Team"),
@@ -823,49 +753,45 @@ both_pitching <- left_join(
   replace(is.na(.), 0)
 
 # Combine core pitching stats
-both_pitching <- both_pitching %>%
+
+# League FIP constant is just averaging the two others. This is terrible math, but it kind of has to be done, and here's why:
+# In the state the data is currently in, I can't really get a two-league average of all the stats. Just one at a time.
+# Probably what I could do is scale this by amount of innings pitched in each league:
+lgFIPc <- (nmtbl_FIPc * (sum(both_pitching$INN_nmtbl)/(sum(both_pitching$INN_mabl, both_pitching$INN_nmtbl))))+
+          (mabl_FIPc * (sum(both_pitching$INN_mabl)/(sum(both_pitching$INN_mabl, both_pitching$INN_nmtbl))))
+
+both_pitching_after <- both_pitching %>%
   mutate(
-    total_INN = INN_mabl + INN_nmtbl,
-    total_pitchWAR = coalesce(pitchWAR_mabl, 0) + coalesce(pitchWAR_nmtbl, 0),
-    ERA = rowMeans(cbind(ERA_mabl, ERA_nmtbl), na.rm = TRUE),
-    FIP = rowMeans(cbind(FIP_mabl, FIP_nmtbl), na.rm = TRUE),
-    WHIP = rowMeans(cbind(WHIP_mabl, WHIP_nmtbl), na.rm = TRUE),
+    IP = (INN_mabl + INN_nmtbl),
+    ER = (ER_mabl + ER_nmtbl),
     G = G_mabl + G_nmtbl,
     GS = GS_mabl + GS_nmtbl,
     W = W_mabl + W_nmtbl,
-    L = L_mabl + L_nmtbl
+    L = L_mabl + L_nmtbl,
+    H = H_mabl + H_nmtbl,
+    HR = HR_mabl + HR_nmtbl,
+    BB = BB_mabl + BB_nmtbl,
+    HBP = HBP_mabl + HBP_nmtbl,
+    K = SO_mabl + SO_nmtbl,
+    total_pitchWAR = (pitchWAR_mabl + pitchWAR_nmtbl),
+    # ERA = 9 x ER / IP
+    ERA = ((9 * ER) / IP), #It is debatable whether this should be 7 for these leagues.
+    ERAvg = ((ERA_mabl + ERA_nmtbl) / 2), #Is it the same? We will find out.
+    
+    # FIP = ((13*HR)+(3*(BB+HBP))-(2*K))/IP + constant    
+    FIP = (((13*HR)+(3*(BB+HBP))-(2*K))/IP + lgFIPc), 
+    WHIP = (BB + H)/(IP)
   ) %>%
-  select(No, Name, Team, G, GS, INN = total_INN, W, L, ERA, FIP, WHIP, MABL = pitchWAR_mabl, NMTBL = pitchWAR_nmtbl, pitchWAR = total_pitchWAR)
+  select(No, Name, Team, G, GS, IP, W, L, ERA, FIP, `WH/IP` = WHIP, MABL = pitchWAR_mabl, NMTBL = pitchWAR_nmtbl, pitchWAR = total_pitchWAR)
 
 # Only Babycakes pitchers
-pitching_two <- both_pitching %>%
+pitching_two <- both_pitching_after %>%
   filter(Team == "Bloomington Babycakes") %>%
   mutate(Team = "Babycakes") %>%
   select(-Team) %>%
-  arrange(desc(INN))
+  arrange(desc(pitchWAR))
 
 pitching_two %>%
   knitr::kable(digits = 2)
 
 ```
-
-\newpage
-
-#WAR Breakdown (Bat v. Pitch), MABL
-
-```{r echo=FALSE, include=FALSE}
-# This would actually be a completely reasonable implementation. It would probably get rid of WvA, since it seems redundant.
-# This is just the MABL batters/pitchers. But it would leak into both_leagues, since we would literally change the WAR calc chunks. Kind of scary, and maybe not necessary.
-
-mabl_war %>%
-  mutate(
-    batWAR = (`wRAA (Batting Runs)` + wSB + fielding_runs + PosAdj - M_replacement_runs) / mabl_runs_per_win,
-    nordWAR = batWAR + pitchWAR,
-    WPG = nordWAR / G
-  ) %>%
-  filter(Team == "Babycakes") %>%
-  select(No, Name, AVG, OBP, SLG, G, batWAR, pitchWAR, nordWAR, WPG) %>%
-  arrange(desc(nordWAR)) %>%
-  knitr::kable(digits = 3)
-```
-
