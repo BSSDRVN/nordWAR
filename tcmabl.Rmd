@@ -99,7 +99,7 @@ mabl_total_season_wins_overall <- ((mabl_games_played * mabl_teams) /2)
 nmtbl_games_played <- 13
 nmtbl_total_games <- 14
 nmtbl_teams <- 12
-nmtbl_opponent_name <- "Colt 45's"
+nmtbl_opponent_name <- "Los Pitbulls"
 
 nmtbl_total_season_wins_overall <- ((nmtbl_games_played * nmtbl_teams) /2)
 
