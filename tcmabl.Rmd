@@ -12,13 +12,13 @@ library(stringr) #Solely for the both_teams addendum. If I can remove this, I wi
 
 ```{r urls, include=FALSE}
 #Batting stats URL for the Sunday league
-mabl_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&u=TCMABL&s=baseball&t=print"
+mabl_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&div=120467&u=TCMABL&s=baseball&t=print"
 
 #Fielding stats URL for the Sunday league
-mabl_fielding_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&viewseas=Summer_2025&cat=Fielding&u=TCMABL&s=baseball&t=print"
+mabl_fielding_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&div=120467&viewseas=Summer_2025&cat=Fielding&u=TCMABL&s=baseball&t=print"
 
 #Pitching stats URL for the Sunday league
-mabl_pitching_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&viewseas=Summer_2025&cat=Pitching&u=TCMABL&s=baseball&t=print"
+mabl_pitching_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&div=120467&viewseas=Summer_2025&cat=Pitching&u=TCMABL&s=baseball&t=print"
 
 #Batting stats URL for the Thursday league
 nmtbl_url <- "https://www.nmtbl.com/teams/default.asp?p=stats&u=NMTBL&s=baseball&t=print"
@@ -89,10 +89,10 @@ nmtbl_scrape_pitching <- read_html(nmtbl_pitching_url) %>% #reads thru the page
 
 ```{r set_constants, include=FALSE}
 ### SET GAMES PLAYED, PARK FACTOR, ASSUMPTIONS ETC ###
-mabl_games_played <- 18
+mabl_games_played <- 20
 mabl_total_games <- 22
 mabl_teams <- 16
-mabl_opponent_name <- "Tomcats"
+mabl_opponent_name <- "Saints"
 
 mabl_total_season_wins_overall <- ((mabl_games_played * mabl_teams) /2)
 
@@ -216,23 +216,6 @@ league_avg_woba <- mean(mabl$wOBA, na.rm=T)
 #I need the league average to calculate wRAA: ((wOBA-League wOBA)/wOBA Scale)*PA
 
 mabl <- mabl %>%
-  filter(Team == "Sea Donkeys" |
-           Team == "Babycakes" |
-           Team == "Expos" |
-           Team == "Giants" |
-           Team == "Saints" |
-           Team == "Bombers" |
-           Team == "Milkmen" |
-           Team == "Hippos" |
-           Team == "Cardinals" |
-           Team == "Coyotes" |
-           Team == "Tomcats" |
-           Team == "Legends" |
-           Team == "North Stars" |
-           Team == "Bats" |
-           Team == "Colts" |
-           Team == "Sweepers") %>% #need to filter for only 18+ teams. 
-  #This can absolutely be done with the filter on the website, then scraping THAT url, but I am doing that later.
   mutate("wRAA (Batting Runs)" = ((wOBA - league_avg_woba) / wobascale) * PA)
 ```
 
@@ -306,39 +289,24 @@ mabl_average_fpct <- mean(mabl_field$`FLD%`)
 
 mabl_field <- mabl_field %>%
   mutate(fielding_runs = (`FLD%` - mabl_average_fpct) * .8 * G)
-  #zero this out for the time being just to check things over
-
-#Here's what we did here:
-# - Made a "replacement runs per PA" stat that roughly tracks the MLB
-#   - Subnote on this: the actual R/PA in the TCMABL is like 0.17, which is nuts but reflects the fact that we have lots of runs and not lots of PAs
-# - Made "replacement" per-person for their own amount of PAs, i.e. "is this guy a better batter than someone with an identical amount of PAs?"
-# - "replacement runs" being a flat number no longer matters
-# - back to actual RPW formula. Hooray.
 
 mabl_RPA <- sum(mabl$R) / sum(mabl$PA)
-mabl_replacement_per_pa <- 20 / 600 #20 runs over 600 pas? We'll probably have to change this
 
 mabl <- mabl %>%
-  mutate(M_replacement_runs = mabl_replacement_per_pa * PA)
-
-mabl_war <- left_join(mabl, mabl_field %>%
-                    select(Name, No, Team, PosAdj, fielding_runs),
-                  by = c("Name", "No", "Team"),
-                  multiple = "first") %>% #If you play multiple positions we do not care, you are the same dude
-  replace(is.na(.), 0) #If you were not in the fielding dataset you get no fielding points
+  mutate(M_replacement_runs = mabl_RPA
+           #mabl_replacement_per_pa 
+         * PA)
 
 
 
-mabl_replacement_runs <- 0 
-#10*(mabl_total_games/162)*((mabl_games_played)/mabl_total_games)
-#this is a flat number per guy, regardless of playing time. Should it be?
+mabl_replacement_runs <- 10*(mabl_total_games/162)*((mabl_games_played)/mabl_total_games)
 
 #Note: This 10 was formerly 20 to match the below note.
 #20 runs in 162 games is the per-player replacement level, so we scale back to however many games we have in a season
+
 mabl_runs_per_win <- 
-  2 * (sum(mabl$R) / (mabl_teams * mabl_games_played)) # #Change for scaled WAR values
-  #10 
-#MLB average. Makes WAR more intuitive for short seasons like ours.
+  2 * (sum(mabl$R) / (mabl_teams * mabl_games_played))
+
 
 
 #PosAdj = (Innings / 9) / team games_played * PosRunValue * (total_games / 162)
@@ -368,6 +336,8 @@ nmtbl_field <- nmtbl_field %>%
     Name == "Schaffner, Taydan" ~ 'SS',
     Name == "Steingas, Evan" ~ '2B',
     Name == "Wetmore, Adam" ~ '3B',
+    Name == "Hammond, Carver" ~ '2B',
+    Name == "Cole, Nathan" ~ '1B',
     
     .default = Posn),
     
@@ -389,39 +359,23 @@ nmtbl_field <- nmtbl_field %>%
 
 nmtbl_average_fpct <- mean(nmtbl_field$`FLD%`)
 
+
 nmtbl_field <- nmtbl_field %>%
   mutate(fielding_runs = (`FLD%` - nmtbl_average_fpct) * .8 * G)
 
-#Here's what we did here:
-# - Made a "replacement runs per PA" stat that roughly tracks the MLB
-#   - Subnote on this: the actual R/PA in the TCMABL is like 0.17, which is nuts but reflects the fact that we have lots of runs and not lots of PAs
-# - Made "replacement" per-person for their own amount of PAs, i.e. "is this guy a better batter than someone with an identical amount of PAs?"
-# - "replacement runs" being a flat number no longer matters
-# - back to actual RPW formula. Hooray.
-
 nmtbl_RPA <- sum(nmtbl$R) / sum(nmtbl$PA)
 
-#See?
-
-nmtbl_replacement_per_pa <- 20 / 600 #20 runs over 600 pas? We'll probably have to change this
-
-#This should actually be the real RPA, but making it the actual number made everyone's stat negative, because only like 3-5 guys from each team hit a disproportionate amount of the runs
-
 nmtbl <- nmtbl %>%
-  mutate(M_replacement_runs = nmtbl_replacement_per_pa * PA)
+  mutate(M_replacement_runs = nmtbl_RPA
+         * PA)
 
-### End edit.
-
-
-nmtbl_replacement_runs <- 0 #10*(nmtbl_total_games/162)*((nmtbl_games_played)/nmtbl_total_games)
+nmtbl_replacement_runs <- #0 
+10*(nmtbl_total_games/162)*((nmtbl_games_played)/nmtbl_total_games)
+#Note: This 10 was formerly 20 to match the below note.
 #20 runs in 162 games is the per-player replacement level, so we scale back to however many games we have in a season
 nmtbl_runs_per_win <- 
-  2 * (sum(nmtbl$R) / (nmtbl_teams * nmtbl_games_played)) #Change for scaled WAR values
-  #10 
-#MLB average. Makes WAR more intuitive for short seasons like ours.
+  2 * (sum(nmtbl$R) / (nmtbl_teams * nmtbl_games_played))
 
-
-#PosAdj = (Innings / 9) / team games_played * PosRunValue * (total_games / 162)
 ```
 
 
@@ -514,7 +468,7 @@ mabl_war <- mabl_war %>%
            PosAdj - mabl_replacement_runs) / (mabl_runs_per_win)) + pitchWAR,
          WPG = nordWAR / G,
          WvRep = (
-      (`wRAA (Batting Runs)` + wSB + fielding_runs + PosAdj) - (mabl_replacement_per_pa * PA)
+      (`wRAA (Batting Runs)` + wSB + fielding_runs + PosAdj) - (mabl_RPA * PA)
     ) / mabl_runs_per_win,
 
     WvA = (
@@ -605,12 +559,12 @@ nmtbl_war <- nmtbl_war %>%
            PosAdj - nmtbl_replacement_runs) / (nmtbl_runs_per_win)) + pitchWAR,
          WPG = nordWAR / G,
          WvRep = (
-      (`wRAA (Batting Runs)` + wSB + fielding_runs + PosAdj) - (mabl_replacement_per_pa * PA)
-    ) / mabl_runs_per_win,
+      (`wRAA (Batting Runs)` + wSB + fielding_runs + PosAdj) - (nmtbl_RPA * PA)
+    ) / nmtbl_runs_per_win,
 
     WvA = (
       ((`wRAA (Batting Runs)` + wSB + fielding_runs + PosAdj)
-    ) / mabl_runs_per_win) + pitchWAR,
+    ) / nmtbl_runs_per_win) + pitchWAR,
 
     WPG_Rep = WvRep / G,
     WPG_avg = WvA / G
@@ -707,20 +661,25 @@ both_leagues <- both_leagues %>%
     HBP = (HBP_mabl + HBP_nmtbl),
     `1B` = (`1B_mabl` + `1B_nmtbl`),
     `2B` = (`2B_mabl` + `2B_nmtbl`),
-    `3B` = (`1B_mabl` + `1B_nmtbl`),
+    `3B` = (`3B_mabl` + `3B_nmtbl`),
     SacF = (SacF_mabl + SacF_nmtbl),
     AVG = H/AB,
     #OBP = (Hits + Walks + Hit by Pitch) / (At Bats + Walks + Hit by Pitch + Sacrifice Flies) 
     OBP = (H + BB + HBP)/(AB+BB+HBP+SacF),
     #SLG = (1B + 2Bx2 + 3Bx3 + HRx4)/AB
-    SLG = (`1B` + (2*`2B`) + (3*`3B`) + (4*HR)) / (AB),
+    SLG = ((`1B` + (2*`2B`) + (3*`3B`) + (4*HR)) / (AB)),
+    #OPS = OBP + SLG
+    OPS = OBP + SLG,
     total_nordWAR = (nordWAR_mabl + nordWAR_nmtbl),
     WPG = (total_nordWAR / G)
     ) %>%
-  select(No, Name, Team, AVG, OBP, SLG, G, 
+  select(No, Name, Team, AVG, OBP, SLG, OPS, G, 
          #G_mabl, G_nmtbl, 
          MABL = nordWAR_mabl, NMTBL = nordWAR_nmtbl, 
-         nordWAR = total_nordWAR, WPG)
+         nordWAR = total_nordWAR, WPG,
+         #OBP/OPS/SLG diagnostics
+         #AB, `1B`, `2B`, `3B`, HR
+  )
 
 # Show only Babycakes (original MABL name)
 cakes_two <- both_leagues %>%
@@ -780,16 +739,17 @@ both_pitching_after <- both_pitching %>%
     
     # FIP = ((13*HR)+(3*(BB+HBP))-(2*K))/IP + constant    
     FIP = (((13*HR)+(3*(BB+HBP))-(2*K))/IP + lgFIPc), 
-    WHIP = (BB + H)/(IP)
+    WHIP = (BB + H)/(IP),
+    pWIP = total_pitchWAR / IP
   ) %>%
-  select(No, Name, Team, G, GS, IP, W, L, ERA, FIP, `WH/IP` = WHIP, MABL = pitchWAR_mabl, NMTBL = pitchWAR_nmtbl, pitchWAR = total_pitchWAR)
+  select(No, Name, Team, G, GS, IP, W, L, ERA, FIP, `WH/IP` = WHIP, MABL = pitchWAR_mabl, NMTBL = pitchWAR_nmtbl, pWAR = total_pitchWAR, `pW/IP` = pWIP)
 
 # Only Babycakes pitchers
 pitching_two <- both_pitching_after %>%
   filter(Team == "Bloomington Babycakes") %>%
   mutate(Team = "Babycakes") %>%
   select(-Team) %>%
-  arrange(desc(pitchWAR))
+  arrange(desc(pWAR))
 
 pitching_two %>%
   knitr::kable(digits = 2)
