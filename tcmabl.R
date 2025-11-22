@@ -1,16 +1,12 @@
----
-output: pdf_document
----
-
-```{r setup, include=FALSE}
+## ----setup, include=FALSE----------------------------------------------------------------------------------------------------------------------------------------
 library(tidyverse)
 library(robotstxt)
 library(rvest)
 
 library(stringr) #Solely for the both_teams addendum. If I can remove this, I will.
-```
 
-```{r urls, include=FALSE}
+
+## ----urls, include=FALSE-----------------------------------------------------------------------------------------------------------------------------------------
 #Batting stats URL for the Sunday league
 mabl_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&div=120467&u=TCMABL&s=baseball&t=print"
 
@@ -31,9 +27,9 @@ nmtbl_pitching_url <- "https://www.nmtbl.com/teams/default.asp?p=stats&viewseas=
 
 #Current URL for the FanGraphs guts page
 fangraphs_guts_url <- "https://www.fangraphs.com/tools/guts?type=cn"
-```
 
-```{r scrape_websites, include=FALSE}
+
+## ----scrape_websites, include=FALSE------------------------------------------------------------------------------------------------------------------------------
 mabl_scrape <- read_html(mabl_url) %>% #reads thru the page
   html_nodes("table") %>% #searches for table nodes
   .[1] %>% #picks the first one from the list
@@ -85,9 +81,9 @@ nmtbl_scrape_pitching <- read_html(nmtbl_pitching_url) %>% #reads thru the page
 #  html_table() %>% #
 #  .[[1]] %>% #selects the table from the console
 #  as_tibble(.name_repair = "unique", header = TRUE)
-```
 
-```{r set_constants, include=FALSE}
+
+## ----set_constants, include=FALSE--------------------------------------------------------------------------------------------------------------------------------
 ### SET GAMES PLAYED, PARK FACTOR, ASSUMPTIONS ETC ###
 mabl_games_played <- 22
 mabl_total_games <- 22
@@ -120,9 +116,9 @@ w1B <- .885
 w2B <- 1.257
 w3B <- 1.592
 wHR <- 2.05
-```
 
-```{r make_row_headers, include=FALSE}
+
+## ----make_row_headers, include=FALSE-----------------------------------------------------------------------------------------------------------------------------
 mabl <- mabl_scrape %>% 
   janitor::row_to_names(row_number = 1) %>%
   mutate(
@@ -174,9 +170,9 @@ nmtbl_pitch <- nmtbl_scrape_pitching %>%
   replace(is.na(.), 0) %>% #all numeric values that should be 0 are now 0 and not NA
   filter(Name != "Overall Stats")
 
-```
 
-```{r batting_runs, include=FALSE}
+
+## ----batting_runs, include=FALSE---------------------------------------------------------------------------------------------------------------------------------
 ## BATTING RUNS (wOBA, wRAA (BAT))
 ### NMTBL
 nmtbl <- nmtbl %>%
@@ -217,9 +213,9 @@ league_avg_woba <- mean(mabl$wOBA, na.rm=T)
 
 mabl <- mabl %>%
   mutate("wRAA (Batting Runs)" = ((wOBA - league_avg_woba) / wobascale) * PA)
-```
 
-```{r baserunning_runs, include=FALSE}
+
+## ----baserunning_runs, include=FALSE-----------------------------------------------------------------------------------------------------------------------------
 #All UBR is set to 0, because I am not going to bother with it. This assumes
 #all of our baserunners are simply okay.
 
@@ -240,9 +236,9 @@ nmtbl_lgwSB <- ((sum(nmtbl$SB) * runSB) + (sum(nmtbl$CS) * runCS)) /
 nmtbl <- nmtbl %>%
   mutate(wSB = (SB * runSB) + (CS * runCS) - (nmtbl_lgwSB * (`1B` + BB + HBP)))
 
-```
 
-```{r fielding_mabl, include=FALSE}
+
+## ----fielding_mabl, include=FALSE--------------------------------------------------------------------------------------------------------------------------------
 
 
 mabl_field <- mabl_field %>%
@@ -310,9 +306,9 @@ mabl_runs_per_win <-
 
 
 #PosAdj = (Innings / 9) / team games_played * PosRunValue * (total_games / 162)
-```
 
-```{r fielding_nmtbl, include=FALSE}
+
+## ----fielding_nmtbl, include=FALSE-------------------------------------------------------------------------------------------------------------------------------
 
 
 nmtbl_field <- nmtbl_field %>%
@@ -376,9 +372,9 @@ nmtbl_replacement_runs <- #0
 nmtbl_runs_per_win <- 
   2 * (sum(nmtbl$R) / (nmtbl_teams * nmtbl_games_played))
 
-```
 
-```{r nmtbl_pitch, include=FALSE}
+
+## ----nmtbl_pitch, include=FALSE----------------------------------------------------------------------------------------------------------------------------------
 # FIP Constant = lgERA – (((13*lgHR)+(3*(lgBB+lgHBP))-(2*lgK))/lgIP)
 nmtbl_FIPc <- (mean(nmtbl_pitch$ERA) - 
                  (((13*mean(nmtbl_pitch$HR))+
@@ -409,9 +405,9 @@ nmtbl_pitch <- nmtbl_pitch %>%
          ReplacementLevel = 0.03*(1 - GS/G) + 0.12*(GS/G),
          WPGAR = WPGAA + ReplacementLevel,
          pitchWAR = WPGAR * (INN/9)) 
-```
 
-```{r mabl_pitch, include=FALSE}
+
+## ----mabl_pitch, include=FALSE-----------------------------------------------------------------------------------------------------------------------------------
 # FIP Constant = lgERA – (((13*lgHR)+(3*(lgBB+lgHBP))-(2*lgK))/lgIP)
 mabl_FIPc <- (mean(mabl_pitch$ERA) - 
                  (((13*mean(mabl_pitch$HR))+
@@ -442,12 +438,9 @@ mabl_pitch <- mabl_pitch %>%
          ReplacementLevel = 0.03*(1 - GS/G) + 0.12*(GS/G),
          WPGAR = WPGAA + ReplacementLevel,
          pitchWAR = WPGAR * (INN/9)) 
-```
 
-# TCMABL: WAR
-## Games Played: `r mabl_games_played` of `r mabl_total_games`
 
-```{r mabl_war_1, include=FALSE}
+## ----mabl_war_1, include=FALSE-----------------------------------------------------------------------------------------------------------------------------------
 
 mabl_war <- left_join(mabl, mabl_field %>%
                     select(Name, No, Team, PosAdj, fielding_runs),
@@ -484,17 +477,9 @@ mabl_cakes_war <- mabl_war %>%
 mabl_cakes_pitch <- mabl_pitch %>%
   filter(Team == "Babycakes")%>%
   select(No, Name, G, GS, INN, W, L, ERA, RA9, FIP)
-```
 
 
-Sum of team WAR: `r sum(mabl_cakes_war$nordWAR)`, league sum/avg `r sum(mabl_war$nordWAR)` / `r mean(mabl_war$nordWAR)`
-
-| Metric                   | What it Shows                                                             |
-| ------------------------ | ------------------------------------------------------------------------- |
-| **nordWAR** | Actual WAR; wins above the "replacement" TCMABL guy.|
-| **WvA**     | Value above the league’s *average* player - not the replacement. |
-
-```{r mabl_war_2, echo=FALSE}
+## ----mabl_war_2, echo=FALSE--------------------------------------------------------------------------------------------------------------------------------------
 as_tibble(mabl_cakes_war) %>%
   arrange(desc(nordWAR)) %>%
   knitr::kable(digits = 3)
@@ -502,15 +487,9 @@ as_tibble(mabl_cakes_war) %>%
 as_tibble(mabl_cakes_pitch) %>%
   arrange(desc(INN)) %>%
   knitr::kable(digits = 2)
-```
 
-\newpage
 
-Who are we playing?
-
-The ***`r mabl_opponent_name`***
-
-```{r mabl_opp_ops, echo=FALSE}
+## ----mabl_opp_ops, echo=FALSE------------------------------------------------------------------------------------------------------------------------------------
 mabl_opp_war <- mabl_war %>%
   filter(Team == mabl_opponent_name) %>%
   select(No, Name, AVG, OBP, SLG, G, SB, CS, nordWAR, WPG, WvA, WPG_avg)
@@ -518,9 +497,9 @@ mabl_opp_war <- mabl_war %>%
 as_tibble(mabl_opp_war) %>%
   arrange(desc(nordWAR)) %>%
   knitr::kable(digits = 3)
-```
 
-```{r mabl_opponent_pitchers, echo=FALSE}
+
+## ----mabl_opponent_pitchers, echo=FALSE--------------------------------------------------------------------------------------------------------------------------
 
 mabl_opp_pitch <- mabl_pitch %>%
   filter(Team == mabl_opponent_name) %>%
@@ -530,14 +509,9 @@ as_tibble(mabl_opp_pitch) %>%
   arrange(desc(INN)) %>%
   knitr::kable(digits = 2)
 
-```
 
-\newpage
 
-# NMTBL: WAR
-## Games Played: `r nmtbl_games_played` of `r nmtbl_total_games`
-
-```{r nmtbl_war_1, include=FALSE}
+## ----nmtbl_war_1, include=FALSE----------------------------------------------------------------------------------------------------------------------------------
 #So I believe I have what I need.
 
 nmtbl_war <- left_join(nmtbl, nmtbl_field %>%
@@ -573,16 +547,9 @@ nmtbl_cakes_war <- nmtbl_war %>%
 
 nmtbl_cakes_pitch <- nmtbl_pitch %>%
   filter(Team == "Bloomington Babycakes")
-```
 
-Sum of team WAR: `r sum(nmtbl_cakes_war$nordWAR)`, league sum/avg `r sum(nmtbl_war$nordWAR)` / `r mean(nmtbl_war$nordWAR)`
 
-| Metric                   | What it Shows                                                             |
-| ------------------------ | ------------------------------------------------------------------------- |
-| **nordWAR** | Actual WAR; wins above the "replacement" NMTBL guy.|
-| **WvA**     | Value above the league’s *average* player - not the replacement. |
-
-```{r nmtbl_war_2, echo=FALSE}
+## ----nmtbl_war_2, echo=FALSE-------------------------------------------------------------------------------------------------------------------------------------
 as_tibble(nmtbl_cakes_war) %>%
   select(No, Name, AVG, OBP, SLG, G, nordWAR, WPG, WvA, WPG_avg) %>%
   arrange(desc(nordWAR)) %>%
@@ -592,16 +559,9 @@ as_tibble(nmtbl_cakes_pitch) %>%
   select(No, Name, G, GS, INN, W, L, ERA, RA9, FIP) %>%
   arrange(desc(INN)) %>%
   knitr::kable(digits = 2)
-```
 
 
-\newpage
-
-Who are we playing?
-
-The ***`r nmtbl_opponent_name`***
-
-```{r nmtbl_opp_ops, echo=FALSE}
+## ----nmtbl_opp_ops, echo=FALSE-----------------------------------------------------------------------------------------------------------------------------------
 nmtbl_opp_war <- nmtbl_war %>%
   filter(Team == nmtbl_opponent_name) %>%
   select(No, Name, AVG, OBP, SLG, G, SB, CS, nordWAR, WPG, WvA, WPG_avg)
@@ -609,11 +569,9 @@ nmtbl_opp_war <- nmtbl_war %>%
 as_tibble(nmtbl_opp_war) %>%
   arrange(desc(nordWAR)) %>%
   knitr::kable(digits = 3)
-```
 
-Their pitchers:
 
-```{r nmtbl_opponent_pitchers, echo=FALSE}
+## ----nmtbl_opponent_pitchers, echo=FALSE-------------------------------------------------------------------------------------------------------------------------
 
 nmtbl_opp_pitch <- nmtbl_pitch %>%
   filter(Team == nmtbl_opponent_name) %>%
@@ -623,14 +581,9 @@ as_tibble(nmtbl_opp_pitch) %>%
   arrange(desc(INN)) %>%
   knitr::kable(digits = 2)
 
-```
 
 
-\newpage
-
-# Two-League Babycake WARs
-
-```{r two_leagues_merge_into_one, echo=FALSE}
+## ----two_leagues_merge_into_one, echo=FALSE----------------------------------------------------------------------------------------------------------------------
 
 # Manually patch team name to match NMTBL
 mabl_war_fixed <- mabl_war %>%
@@ -691,9 +644,9 @@ cakes_two %>%
   knitr::kable(digits = 3)
 
 
-```
 
-```{r two_one_pitch, echo=FALSE}
+
+## ----two_one_pitch, echo=FALSE-----------------------------------------------------------------------------------------------------------------------------------
 
 # Fix MABL team name to match NMTBL for joining
 mabl_pitch_fixed <- mabl_pitch %>%
@@ -752,4 +705,4 @@ pitching_two <- both_pitching_after %>%
 pitching_two %>%
   knitr::kable(digits = 2)
 
-```
+
