@@ -15,19 +15,19 @@ library(stringr) #Solely for the both_teams addendum. If I can remove this, I wi
 mabl_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&div=120467&u=TCMABL&s=baseball&t=print"
 
 #Fielding stats URL for the Sunday league
-mabl_fielding_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&div=120467&viewseas=Summer_2025&cat=Fielding&u=TCMABL&s=baseball&t=print"
+mabl_fielding_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&div=120467&viewseas=Summer_2026&cat=Fielding&u=TCMABL&s=baseball&t=print"
 
 #Pitching stats URL for the Sunday league
-mabl_pitching_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&div=120467&viewseas=Summer_2025&cat=Pitching&u=TCMABL&s=baseball&t=print"
+mabl_pitching_url <- "https://www.tcmabl.com/teams/default.asp?p=stats&div=120467&viewseas=Summer_2026&cat=Pitching&u=TCMABL&s=baseball&t=print"
 
 #Batting stats URL for the Thursday league
 nmtbl_url <- "https://www.nmtbl.com/teams/default.asp?p=stats&u=NMTBL&s=baseball&t=print"
 
 #Fielding stats URL for the Thursday league
-nmtbl_fielding_url <- "https://www.nmtbl.com/teams/default.asp?p=stats&viewseas=Summer_2025&cat=Fielding&u=NMTBL&s=baseball&t=print"
+nmtbl_fielding_url <- "https://www.nmtbl.com/teams/default.asp?p=stats&viewseas=Summer_2026&cat=Fielding&u=NMTBL&s=baseball&t=print"
 
 #Pitching stats URL for the Thursday league
-nmtbl_pitching_url <- "https://www.nmtbl.com/teams/default.asp?p=stats&viewseas=Summer_2025&cat=Pitching&u=NMTBL&s=baseball&t=print"
+nmtbl_pitching_url <- "https://www.nmtbl.com/teams/default.asp?p=stats&viewseas=Summer_2026&cat=Pitching&u=NMTBL&s=baseball&t=print"
 
 #Current URL for the FanGraphs guts page
 fangraphs_guts_url <- "https://www.fangraphs.com/tools/guts?type=cn"
@@ -89,26 +89,24 @@ nmtbl_scrape_pitching <- read_html(nmtbl_pitching_url) %>% #reads thru the page
 
 ```{r set_constants, include=FALSE}
 ### SET GAMES PLAYED, PARK FACTOR, ASSUMPTIONS ETC ###
-mabl_games_played <- 22
+mabl_games_played <- 2
 mabl_total_games <- 22
-mabl_teams <- 16
+mabl_teams <- 14
 mabl_opponent_name <- "Sea Donkeys"
 
 mabl_total_season_wins_overall <- ((mabl_games_played * mabl_teams) /2)
+#This is fundamentally "How many games have been played across the league".
 
-nmtbl_games_played <- 14
-nmtbl_total_games <- 14
-nmtbl_teams <- 12
-nmtbl_opponent_name <- "Minneapolis North Stars"
+nmtbl_games_played <- 3
+nmtbl_total_games <- 15
+nmtbl_teams <- 16
+nmtbl_opponent_name <- "Mud Hens"
 
 nmtbl_total_season_wins_overall <- ((nmtbl_games_played * nmtbl_teams) /2)
 
 park_factor <- 1
 wobascale <- 1.24 #static for 2025
   #fg_scrape[1, ]$wOBAScale #first row's wobascale column
-
-runCS <- -.3 #How bad does it affect a player to be caught stealing? (FG says -(2 x RunsPerOut + 0.075).)
-runSB <- .2 #How well does it affect a player to steal a base? (FG says set this at 0.2.)
 
 RPW_FG <- 9.692
   #fg_scrape[1, ]$`R/W`
@@ -127,7 +125,7 @@ mabl <- mabl_scrape %>%
   janitor::row_to_names(row_number = 1) %>%
   mutate(
     across(.cols = c(G, PA, AB, R, H, `2B`, `3B`, HR, RBI, HBP, BB, SO, SacB, SacF, SB, CS), .fns = as.integer),
-    across(.cols = c(AVG, OBP, SLG), .fns = as.double)
+    across(.cols = c(AVG, OBP, SLG, OPS), .fns = as.double)
   ) %>%
   replace(is.na(.), 0) #all numeric values that should be 0 are now 0 and not NA
 
@@ -142,7 +140,9 @@ mabl_field <- mabl_scrape_fielding %>%
 mabl_pitch <- mabl_scrape_pitching %>%
   janitor::row_to_names(row_number = 1) %>%
   mutate(
-    across(.cols = c(G, GS, CG, SHO, W, L, SV, SVO, BF, H, R, ER, HR, HBP, BB, IBB, SO, SacF, SacB, BK, B, S, PC, WP), .fns = as.integer),
+    across(.cols = c(G, GS, CG, SHO, W, L, SV, SVO, BF, H, R, ER, HR, HBP, BB,# IBB, 
+                     SO, SacF, #SacB, BK, B, S, 
+                     PC, WP), .fns = as.integer),
     across(.cols = c(INN, WHIP, OBA, ERA), .fns = as.double)
   ) %>%
   replace(is.na(.), 0) #all numeric values that should be 0 are now 0 and not NA
@@ -150,8 +150,10 @@ mabl_pitch <- mabl_scrape_pitching %>%
 nmtbl <- nmtbl_scrape %>% 
   janitor::row_to_names(row_number = 1) %>%
   mutate(
-    across(.cols = c(G, PA, AB, R, H, `2B`, `3B`, HR, RBI, HBP, BB, SO, SacB, SacF, SB, CS), .fns = as.integer),
-    across(.cols = c(AVG, OBP, SLG, TB, OPS), .fns = as.double) #the thursday league has OPS and total bases for some reason
+    across(.cols = c(G, PA, AB, R, H, `2B`, `3B`, HR, RBI, HBP, BB, SO, SacB, 
+                     SacF, SB, CS), .fns = as.integer),
+    across(.cols = c(AVG, OBP, SLG, #TB, 
+                     OPS), .fns = as.double) #the thursday league has OPS and total bases for some reason
   ) %>% replace(is.na(.), 0) %>%
   filter(Name != "Overall Stats")
 
@@ -168,7 +170,8 @@ nmtbl_field <- nmtbl_scrape_fielding %>% #This is stupid; us and the Legends are
 nmtbl_pitch <- nmtbl_scrape_pitching %>%
   janitor::row_to_names(row_number = 1) %>%
   mutate(
-    across(.cols = c(G, GS, CG, SHO, W, L, SV, SVO, BF, H, R, ER, HR, HBP, BB, IBB, SO, SacF, SacB, BK, B, S, PC, WP, CI), .fns = as.integer),
+    across(.cols = c(G, GS, CG, SHO, W, L, SV, SVO, BF, H, R, ER, HR, HBP, BB, IBB, SO, SacF, SacB, 
+                     BK, B, S, PC, WP, CI), .fns = as.integer),
     across(.cols = c(INN, WHIP, OBA, ERA), .fns = as.double)
   ) %>%
   replace(is.na(.), 0) %>% #all numeric values that should be 0 are now 0 and not NA
@@ -223,22 +226,33 @@ mabl <- mabl %>%
 #All UBR is set to 0, because I am not going to bother with it. This assumes
 #all of our baserunners are simply okay.
 
-mabl_lgwSB <- ((sum(mabl$SB) * runSB) + (sum(mabl$CS) * runCS)) / 
+
+mabl_RPO <- sum(mabl$R) / (mabl_total_season_wins_overall * 21)
+#I can use this because I am conservatively assuming everyone plays a complete game. 
+#This is obviously false, but it shouldn't break a whole ton of stuff.
+
+mabl_runCS <- -(2 * mabl_RPO + 0.075) #How bad does it affect our runs to be caught stealing? (FG says -(2 x RunsPerOut + 0.075).)
+nmtbl_RPO <- sum(nmtbl$R) / (nmtbl_total_season_wins_overall * 21)
+nmtbl_runCS <- -(2 * nmtbl_RPO + 0.075)
+runSB <- .2 #How well does it affect our runs to steal a base? (FG says set this at 0.2.)
+
+
+mabl_lgwSB <- ((sum(mabl$SB) * runSB) + (sum(mabl$CS) * mabl_runCS)) / 
                    (sum(mabl$`1B`) + sum(mabl$BB) + sum(mabl$HBP))
 #League stolen base runs (lgwSB): (SB * runSB + CS * runCS) / (1B + BB + HBP – IBB)
 
 mabl <- mabl %>%
-  mutate(wSB = (SB * runSB) + (CS * runCS) - (mabl_lgwSB * (`1B` + BB + HBP)))
+  mutate(wSB = (SB * runSB) + (CS * mabl_runCS) - (mabl_lgwSB * (`1B` + BB + HBP)))
 
 
 
 
-nmtbl_lgwSB <- ((sum(nmtbl$SB) * runSB) + (sum(nmtbl$CS) * runCS)) / 
+nmtbl_lgwSB <- ((sum(nmtbl$SB) * runSB) + (sum(nmtbl$CS) * nmtbl_runCS)) / 
                    (sum(nmtbl$`1B`) + sum(nmtbl$BB) + sum(nmtbl$HBP))
 #League stolen base runs (lgwSB): (SB * runSB + CS * runCS) / (1B + BB + HBP – IBB)
 
 nmtbl <- nmtbl %>%
-  mutate(wSB = (SB * runSB) + (CS * runCS) - (nmtbl_lgwSB * (`1B` + BB + HBP)))
+  mutate(wSB = (SB * runSB) + (CS * nmtbl_runCS) - (nmtbl_lgwSB * (`1B` + BB + HBP)))
 
 ```
 
@@ -246,28 +260,26 @@ nmtbl <- nmtbl %>%
 
 
 mabl_field <- mabl_field %>%
-  filter(TC>0) %>%
-  mutate(Posn = case_when(
-    Name == "Backus, Matt" ~ 'C', #manually fixing the Babycake positions since we don't have them uploaded to TCMABL lmao
-    Name == "Everett, Max" ~ '2B',
-    Name == 'Peterson, Noah' ~ '2B',
-    Name == 'Becker, Isaac' ~ '1B',
-    Name == 'Birno, Blake' ~ '2B',
-    Name == 'Cannon, Josh' ~ 'CF',
-    Name == 'Cernohous, Pierce' ~ '1B',
-    Name == "Everett, Sam" ~ 'LF',
-    Name == "Fraenkel, Gaylen" ~ 'LF',
-    Name == "Hebel, Ross" ~ 'SS',
-    Name == "Jahnke, Jaden" ~ '2B',
-    Name == "Leupold, Oliver" ~ '3B',
-    Name == "Nelson, Thomas" ~ '1B',
-    Name == "Nyasende, Nic" ~ 'RF',
-    Name == "Ombori, Henry" ~ 'RF',
-    Name == "Schaffner, Taydan" ~ 'SS',
-    Name == "Steingas, Evan" ~ '2B',
-    Name == "Wetmore, Adam" ~ '3B',
-    
-    .default = Posn),
+  filter(TC>0) #Have you touched a baseball this year
+
+mabl_field <- mabl_field %>%
+  mutate(
+    # Posn = case_when(
+    # Name == "Backus, Matt" ~ 'C', #manually fixing the Babycake positions since we don't have them uploaded to TCMABL lmao
+    # Name == "Everett, Max" ~ 'C',
+    # Name == 'Becker, Isaac' ~ '1B',
+    # Name == 'Birno, Blake' ~ '2B',
+    # Name == 'Cannon, Josh' ~ 'CF',
+    # Name == 'Cernohous, Pierce' ~ '1B',
+    # Name == "Everett, Sam" ~ 'LF',
+    # Name == "Hebel, Ross" ~ 'SS',
+    # Name == "Leupold, Oliver" ~ '3B',
+    # Name == "Nelson, Thomas" ~ '1B',
+    # Name == "Ombori, Henry" ~ 'RF',
+    # Name == "Schaffner, Taydan" ~ 'SS',
+    # Name == "Wetmore, Adam" ~ '3B',
+    # 
+    # .default = Posn),
     
     PosRunValue = case_when( #These are generally accepted values that I got off FanGraphs' blog.
     Posn == "C" ~ 12.5,
@@ -289,6 +301,11 @@ mabl_average_fpct <- mean(mabl_field$`FLD%`)
 
 mabl_field <- mabl_field %>%
   mutate(fielding_runs = (`FLD%` - mabl_average_fpct) * .8 * G)
+#The 0.8 here is a calibration constant - it just scales down the relative impact of fielding
+#on a player's NordWAR. Since we can't get good data, I'd hate for a guy who bats well to be 
+#fighting an error committed during a blowout in, like, one or two fielding chances.
+
+#It also continues to encourage 1.000s - essentially "Fielding well still saves runs".
 
 mabl_RPA <- sum(mabl$R) / sum(mabl$PA)
 
@@ -316,30 +333,33 @@ mabl_runs_per_win <-
 
 
 nmtbl_field <- nmtbl_field %>%
-  filter(TC>0) %>% #literally "Have you touched a baseball"
-  mutate(Posn = case_when(
-    Name == "Backus, Matt" ~ 'C', #manually fixing the Babycake positions since we don't have them uploaded to NMTBL lmao
-    Name == "Everett, Max" ~ '2B',
-    Name == 'Peterson, Noah' ~ '2B',
-    Name == 'Becker, Isaac' ~ '1B',
-    Name == 'Birno, Blake' ~ '2B',
-    Name == 'Cannon, Josh' ~ 'CF',
-    Name == 'Cernohous, Pierce' ~ '1B',
-    Name == "Everett, Sam" ~ 'LF',
-    Name == "Fraenkel, Gaylen" ~ 'LF',
-    Name == "Hebel, Ross" ~ 'SS',
-    Name == "Jahnke, Jaden" ~ '2B',
-    Name == "Leupold, Oliver" ~ '3B',
-    Name == "Nelson, Thomas" ~ '1B',
-    Name == "Nyasende, Nic" ~ 'RF',
-    Name == "Ombori, Henry" ~ 'RF',
-    Name == "Schaffner, Taydan" ~ 'SS',
-    Name == "Steingas, Evan" ~ '2B',
-    Name == "Wetmore, Adam" ~ '3B',
-    Name == "Hammond, Carver" ~ '2B',
-    Name == "Cole, Nathan" ~ '1B',
-    
-    .default = Posn),
+  filter(TC>0)  #literally "Have you touched a baseball"
+
+nmtbl_field <- nmtbl_field %>%
+   mutate(
+  #   Posn = case_when(
+  #   Name == "Backus, Matt" ~ 'C', #manually fixing the Babycake positions since we don't have them uploaded to NMTBL lmao
+  #   Name == "Everett, Max" ~ '2B',
+  #   Name == 'Peterson, Noah' ~ '2B',
+  #   Name == 'Becker, Isaac' ~ '1B',
+  #   Name == 'Birno, Blake' ~ '2B',
+  #   Name == 'Cannon, Josh' ~ 'CF',
+  #   Name == 'Cernohous, Pierce' ~ '1B',
+  #   Name == "Everett, Sam" ~ 'LF',
+  #   Name == "Fraenkel, Gaylen" ~ 'LF',
+  #   Name == "Hebel, Ross" ~ 'SS',
+  #   Name == "Jahnke, Jaden" ~ '2B',
+  #   Name == "Leupold, Oliver" ~ '3B',
+  #   Name == "Nelson, Thomas" ~ '1B',
+  #   Name == "Nyasende, Nic" ~ 'RF',
+  #   Name == "Ombori, Henry" ~ 'RF',
+  #   Name == "Schaffner, Taydan" ~ 'SS',
+  #   Name == "Steingas, Evan" ~ '2B',
+  #   Name == "Wetmore, Adam" ~ '3B',
+  #   Name == "Hammond, Carver" ~ '2B',
+  #   Name == "Cole, Nathan" ~ '1B',
+  #   
+  #   .default = Posn),
     
     PosRunValue = case_when(
     Posn == "C" ~ 12.5,
@@ -391,7 +411,7 @@ nmtbl_FIPc <- (mean(nmtbl_pitch$ERA) -
 nmtbl_pitch <- nmtbl_pitch %>%
   mutate(FIP = ((13*HR)+(3*(BB+HBP))-(2*SO))/INN + nmtbl_FIPc,
          RA9 = R / (INN/9)) %>%
-  filter(FIP > 0)
+  filter(is.finite(FIP)) 
 
 nmtbl_ra9_c <- mean(nmtbl_pitch$FIP) - mean(nmtbl_pitch$ERA)
 
@@ -424,7 +444,7 @@ mabl_FIPc <- (mean(mabl_pitch$ERA) -
 mabl_pitch <- mabl_pitch %>%
   mutate(FIP = ((13*HR)+(3*(BB+HBP))-(2*SO))/INN + mabl_FIPc,
          RA9 = R / (INN/9)) %>%
-  filter(is.finite(FIP), INN > 0) #No infinite FIPs. I hate that.
+  filter(is.finite(FIP)) #No infinite FIPs. I hate that.
 
 mabl_ra9_c <- mean(mabl_pitch$FIP) - mean(mabl_pitch$ERA)
 
@@ -689,7 +709,6 @@ cakes_two <- both_leagues %>%
 cakes_two %>%
   arrange(desc(nordWAR)) %>%
   knitr::kable(digits = 3)
-
 
 ```
 

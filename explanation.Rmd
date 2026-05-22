@@ -1,0 +1,118 @@
+---
+title: "explanation"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+$$
+\textbf{nordWAR (Position Players)} =
+\frac{
+wRAA + wSB + \text{Fielding} + \text{PosAdj} - R_{\text{rep}}
+}{RPW}
+$$
+
+$$
+\textbf{nordWAR (Pitchers)} =
+\text{pitchWAR}
+$$
+
+$$
+\text{pitchWAR} =
+\left(
+\frac{RAAP9}{dRPW}
++ \text{RepLevel}
+\right)\cdot \frac{IP}{9}
+$$
+
+$$
+wRAA =
+\frac{wOBA - wOBA_{\text{lg}}}{\text{wOBA scale}}\cdot PA
+$$
+
+$$
+wOBA =
+\frac{
+w_{BB}BB + w_{HBP}HBP + w_{1B}1B + w_{2B}2B + w_{3B}3B + w_{HR}HR
+}{
+PA + BB + SF + HBP
+}
+$$
+
+$$
+wSB =
+SB\cdot r_{SB} + CS\cdot r_{CS}
+- \text{lgwSB}\cdot (1B + BB + HBP)
+$$
+
+$$
+\text{Fielding} =
+(FPct - FPct_{\text{lg}})\cdot 0.8 \cdot G
+$$
+
+$$
+\text{PosAdj} =
+\frac{G}{G_{\text{team}}}
+\cdot \text{PosRunValue}
+\cdot \frac{G_{\text{season}}}{162}
+$$
+
+$$
+R_{\text{rep}} =
+10 \cdot \frac{G_{\text{season}}}{162}
+\cdot \frac{G_{\text{played}}}{G_{\text{season}}}
+$$
+
+$$
+RPW =
+2 \cdot
+\left(
+\frac{\text{Total Runs}}{\text{Teams} \cdot G_{\text{played}}}
+\right)
+$$
+
+$$
+FIP =
+\frac{13HR + 3(BB + HBP) - 2K}{IP}
++ C_{\text{FIP}}
+$$
+
+$$
+RAAP9 =
+FIPR9_{\text{lg}} - FIPR9
+$$
+
+$$
+dRPW =
+\left(
+\frac{
+(18 - IP/G)\cdot FIPR9_{\text{lg}} + (IP/G)\cdot FIPR9
+}{18}
++ 2
+\right)\cdot 1.5
+$$
+
+$$
+\text{RepLevel} =
+0.03\left(1 - \frac{GS}{G}\right)
++ 0.12\left(\frac{GS}{G}\right)
+$$
+
+---
+
+### \textbf{Definitions}
+
+\begin{enumerate}
+\item $wRAA$: Batting runs above league average.
+\item $wOBA$: Weighted on-base average.
+\item $wSB$: Stolen base runs above average.
+\item Fielding: Defensive value vs league-average fielding percentage.
+\item PosAdj: Positional adjustment.
+\item $R_{\text{rep}}$: Replacement-level runs.
+\item $RPW$: Runs per win.
+\item $FIP$: Fielding Independent Pitching.
+\item $RAAP9$: Runs above average per 9 innings.
+\item $dRPW$: Dynamic runs per win.
+\item RepLevel: Starter/reliever adjustment.
+\item $IP$: Innings pitched.
+\end{enumerate}
