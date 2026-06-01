@@ -89,35 +89,34 @@ nmtbl_scrape_pitching <- read_html(nmtbl_pitching_url) %>% #reads thru the page
 
 ```{r set_constants, include=FALSE}
 ### SET GAMES PLAYED, PARK FACTOR, ASSUMPTIONS ETC ###
-mabl_games_played <- 2
+mabl_games_played <- 4
 mabl_total_games <- 22
 mabl_teams <- 14
-mabl_opponent_name <- "Sea Donkeys"
+mabl_opponent_name <- "Milkmen"
 
 mabl_total_season_wins_overall <- ((mabl_games_played * mabl_teams) /2)
 #This is fundamentally "How many games have been played across the league".
 
-nmtbl_games_played <- 3
+nmtbl_games_played <- 5
 nmtbl_total_games <- 15
 nmtbl_teams <- 16
-nmtbl_opponent_name <- "Mud Hens"
+nmtbl_opponent_name <- "Minneapolis North Stars"
 
 nmtbl_total_season_wins_overall <- ((nmtbl_games_played * nmtbl_teams) /2)
 
-park_factor <- 1
-wobascale <- 1.24 #static for 2025
+wobascale <- 1.232 #using 2025 final stats
   #fg_scrape[1, ]$wOBAScale #first row's wobascale column
 
-RPW_FG <- 9.692
+RPW_FG <- 9.774
   #fg_scrape[1, ]$`R/W`
 
 #other FanGraphs constants, manually updated *sigh*
-wBB <- .692
-wHBP <- .723
-w1B <- .885
-w2B <- 1.257
-w3B <- 1.592
-wHR <- 2.05
+wBB <- .691
+wHBP <- .722
+w1B <- .882
+w2B <- 1.252
+w3B <- 1.584
+wHR <- 2.037
 ```
 
 ```{r make_row_headers, include=FALSE}
@@ -141,7 +140,8 @@ mabl_pitch <- mabl_scrape_pitching %>%
   janitor::row_to_names(row_number = 1) %>%
   mutate(
     across(.cols = c(G, GS, CG, SHO, W, L, SV, SVO, BF, H, R, ER, HR, HBP, BB,# IBB, 
-                     SO, SacF, #SacB, BK, B, S, 
+                     SO, SacF, #SacB, BK, #which will come back whenever someone records one
+                     B, S, 
                      PC, WP), .fns = as.integer),
     across(.cols = c(INN, WHIP, OBA, ERA), .fns = as.double)
   ) %>%
@@ -224,12 +224,12 @@ mabl <- mabl %>%
 
 ```{r baserunning_runs, include=FALSE}
 #All UBR is set to 0, because I am not going to bother with it. This assumes
-#all of our baserunners are simply okay.
+#all of our baserunners are simply okay, which is mostly true.
 
 
 mabl_RPO <- sum(mabl$R) / (mabl_total_season_wins_overall * 21)
 #I can use this because I am conservatively assuming everyone plays a complete game. 
-#This is obviously false, but it shouldn't break a whole ton of stuff.
+#This is obviously false due to mercy rules, but it shouldn't break a whole ton of stuff.
 
 mabl_runCS <- -(2 * mabl_RPO + 0.075) #How bad does it affect our runs to be caught stealing? (FG says -(2 x RunsPerOut + 0.075).)
 nmtbl_RPO <- sum(nmtbl$R) / (nmtbl_total_season_wins_overall * 21)
