@@ -89,18 +89,18 @@ nmtbl_scrape_pitching <- read_html(nmtbl_pitching_url) %>% #reads thru the page
 
 ```{r set_constants, include=FALSE}
 ### SET GAMES PLAYED, PARK FACTOR, ASSUMPTIONS ETC ###
-mabl_games_played <- 8
+mabl_games_played <- 10
 mabl_total_games <- 22
 mabl_teams <- 14
-mabl_opponent_name <- "Sea Donkeys"
+mabl_opponent_name <- "Expos"
 
 mabl_total_season_wins_overall <- ((mabl_games_played * mabl_teams) /2)
 #This is fundamentally "How many games have been played across the league".
 
-nmtbl_games_played <- 6 #This is down one for us until we make up the Stars game. I'm counting North Stars even though the stats aren't in.
+nmtbl_games_played <- 7 #This is down one for us until we make up the Stars game. I'm counting North Stars even though the stats aren't in.
 nmtbl_total_games <- 15
 nmtbl_teams <- 16
-nmtbl_opponent_name <- "Tri City Twins"
+nmtbl_opponent_name <- "Banditos"
 
 nmtbl_total_season_wins_overall <- ((nmtbl_games_played * nmtbl_teams) /2)
 
@@ -140,7 +140,8 @@ mabl_pitch <- mabl_scrape_pitching %>%
   janitor::row_to_names(row_number = 1) %>%
   mutate(
     across(.cols = c(G, GS, CG, SHO, W, L, SV, SVO, BF, H, R, ER, HR, HBP, BB,# IBB, 
-                     SO, SacF, #SacB, BK, #which will come back whenever someone records one
+                     SO, SacF, #SacB, 
+                     BK, #which will come back whenever someone records one
                      B, S, 
                      PC, WP), .fns = as.integer),
     across(.cols = c(INN, WHIP, OBA, ERA), .fns = as.double)
